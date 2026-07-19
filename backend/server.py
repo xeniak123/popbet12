@@ -31,7 +31,7 @@ ACCESS_TOKEN_DAYS = int(os.environ.get("ACCESS_TOKEN_DAYS", "30"))
 EMERGENT_PUSH_KEY = os.environ.get("EMERGENT_PUSH_KEY", "placeholder")
 # Klucz do panelu /admin i endpointów administracyjnych. Gdy pusty, admin jest wyłączony
 # (a resolve działa bez klucza — tryb deweloperski/testowy).
-ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "60cf0503d0c4b6906d155d9672e3a8d7")
 PUSH_BASE_URL = "https://integrations.emergentagent.com"
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
