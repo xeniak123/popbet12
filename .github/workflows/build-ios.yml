@@ -106,14 +106,6 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.inputs.tag }}
 
-      - name: Commit source.json
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add altstore/source.json
-          git diff --cached --quiet || git commit -m "AltStore source.json dla ${{ github.event.inputs.tag }}"
-          git push
-
       - name: Utworzenie Release z .ipa
         env:
           GH_TOKEN: ${{ github.token }}
@@ -122,3 +114,12 @@ jobs:
             --title "PopBet ${{ github.event.inputs.tag }}" \
             --notes "Niepodpisany build iOS do instalacji przez AltStore/Sideloadly. Źródło AltStore: https://raw.githubusercontent.com/${{ github.repository }}/main/altstore/source.json" \
             || gh release upload "${{ github.event.inputs.tag }}" frontend/PopBet.ipa --clobber
+
+      - name: Commit source.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add altstore/source.json
+          git diff --cached --quiet || git commit -m "AltStore source.json dla ${{ github.event.inputs.tag }}"
+          git pull --rebase origin main
+          git push origin HEAD:main
