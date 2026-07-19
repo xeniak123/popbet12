@@ -190,6 +190,16 @@ class AdminBetsImportIn(BaseModel):
     bets: List[AdminBetIn]
 
 
+class AdminResolveItem(BaseModel):
+    bet_id: str
+    winning_option: str  # "a" | "b" | "unknown"
+    reason: Optional[str] = None
+
+
+class AdminResolveBatchIn(BaseModel):
+    results: List[AdminResolveItem]
+
+
 # ---------- helpers ----------
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -725,23 +735,8 @@ async def my_bets(status: str = Query(default="active"), user: dict = Depends(ge
 
 
 # --- resolve (z kluczem admina, jeśli ADMIN_KEY ustawiony; bez klucza tylko w trybie dev) ---
-@app.post("/api/bets/{bet_id}/resolve")
-async def resolve_bet(
-    bet_id: str,
-    payload: ResolveIn,
-    x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
-):
-    if ADMIN_KEY and (not x_admin_key or not hmac.compare_digest(x_admin_key, ADMIN_KEY)):
-        raise HTTPException(status_code=401, detail="Nieprawidłowy klucz admina")
-    bet = await db.bets.find_one({"bet_id": bet_id}, {"_id": 0})
-    if not bet:
-        raise HTTPException(status_code=404, detail="Zakład nie istnieje")
-    if bet.get("resolved"):
-        raise HTTPException(status_code=400, detail="Zakład już rozstrzygnięty")
-    if payload.winning_option not in ("a", "b"):
-        raise HTTPException(status_code=400, detail="Nieprawidłowa opcja")
-
-    win_key = payload.winning_option
+async def _do_resolve(bet: dict, win_key: str) -> dict:
+    bet_id = bet["bet_id"]
     lose_key = "b" if win_key == "a" else "a"
 
     win_option = next(o for o in bet["options"] if o["key"] == win_key)
@@ -806,6 +801,24 @@ async def resolve_bet(
         )
 
     return {"ok": True, "winning_option": win_key, "winners": sum(1 for p in placements if p["option"] == win_key)}
+
+
+@app.post("/api/bets/{bet_id}/resolve")
+async def resolve_bet(
+    bet_id: str,
+    payload: ResolveIn,
+    x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
+):
+    if ADMIN_KEY and (not x_admin_key or not hmac.compare_digest(x_admin_key, ADMIN_KEY)):
+        raise HTTPException(status_code=401, detail="Nieprawidłowy klucz admina")
+    bet = await db.bets.find_one({"bet_id": bet_id}, {"_id": 0})
+    if not bet:
+        raise HTTPException(status_code=404, detail="Zakład nie istnieje")
+    if bet.get("resolved"):
+        raise HTTPException(status_code=400, detail="Zakład już rozstrzygnięty")
+    if payload.winning_option not in ("a", "b"):
+        raise HTTPException(status_code=400, detail="Nieprawidłowa opcja")
+    return await _do_resolve(bet, payload.winning_option)
 
 
 # --- profile / stats ---
@@ -1276,6 +1289,32 @@ async def admin_add_bets(payload: AdminBetsImportIn, _: None = Depends(require_a
     for d in docs:
         d.pop("_id", None)
     return {"ok": True, "created": len(docs), "bets": docs}
+
+
+@app.post("/api/admin/bets/resolve-batch")
+async def admin_resolve_batch(payload: AdminResolveBatchIn, _: None = Depends(require_admin)):
+    if not payload.results:
+        raise HTTPException(status_code=400, detail="Pusta lista wyników")
+    out = []
+    for item in payload.results:
+        if item.winning_option not in ("a", "b"):
+            out.append({"bet_id": item.bet_id, "status": "pominięty", "detail": "wynik nieznany"})
+            continue
+        bet = await db.bets.find_one({"bet_id": item.bet_id}, {"_id": 0})
+        if not bet:
+            out.append({"bet_id": item.bet_id, "status": "błąd", "detail": "zakład nie istnieje"})
+            continue
+        if bet.get("resolved"):
+            out.append({"bet_id": item.bet_id, "status": "pominięty", "detail": "już rozstrzygnięty"})
+            continue
+        result = await _do_resolve(bet, item.winning_option)
+        win_label = next(o["label"] for o in bet["options"] if o["key"] == item.winning_option)
+        out.append({
+            "bet_id": item.bet_id,
+            "status": "rozstrzygnięty",
+            "detail": f"wygrało: {win_label}, wygranych kuponów: {result['winners']}",
+        })
+    return {"ok": True, "results": out}
 
 
 @app.get("/api/admin/bets")

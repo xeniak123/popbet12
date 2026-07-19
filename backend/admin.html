@@ -45,11 +45,11 @@
     <span id="keyState" class="mut"></span>
   </div>
 
-  <h2>➕ Dodaj zakłady</h2>
+  <h2>➕ Dodaj zakłady / ✅ wklej wyniki</h2>
   <div class="card">
     <div class="mut" style="margin-bottom:8px">
-      Wklej JSON z zakładami (możesz wkleić prosto z czatu AI — znaczniki ```json są ignorowane).
-      Nie wiesz jak ma wyglądać? Kliknij „Kopiuj prompt dla AI”, wklej do ChatGPT/Claude'a i odeślij mi wynik tutaj.
+      Jedno pole do wszystkiego: wklej JSON z <b>nowymi zakładami</b> albo z <b>wynikami do rozstrzygnięcia</b>
+      — sam rozpoznam, co to jest (znaczniki ```json są ignorowane). Prompty dla AI skopiujesz przyciskami poniżej.
     </div>
     <textarea id="betsInput" placeholder='[
   {
@@ -61,8 +61,9 @@
     "closes_in_hours": 24
   }
 ]'></textarea>
-    <button onclick="addBets()">Dodaj zakłady</button>
-    <button class="ghost" onclick="copyPrompt()">📋 Kopiuj prompt dla AI</button>
+    <button onclick="submitInput()">Wyślij</button>
+    <button class="ghost" onclick="copyPrompt()">📋 Prompt: nowe zakłady</button>
+    <button class="ghost" onclick="copyResultsPrompt()">🔎 Prompt: sprawdź wyniki</button>
     <div id="addMsg" class="msg"></div>
   </div>
 
@@ -111,28 +112,84 @@ Odpowiedz WYŁĄCZNIE poprawnym JSON-em w tym formacie (bez żadnego tekstu prze
   });
 }
 
+let cachedBets = [];
+
 function parseInput(raw) {
   let t = raw.trim();
   t = t.replace(/^```(json)?/i, "").replace(/```$/,"").trim();
   const data = JSON.parse(t);
-  if (Array.isArray(data)) return { bets: data };
-  if (data && Array.isArray(data.bets)) return data;
-  throw new Error("Oczekiwano tablicy JSON z zakładami");
+  let arr;
+  if (Array.isArray(data)) arr = data;
+  else if (data && Array.isArray(data.bets)) arr = data.bets;
+  else if (data && Array.isArray(data.results)) arr = data.results;
+  else throw new Error("Oczekiwano tablicy JSON");
+  if (!arr.length) throw new Error("Pusta lista");
+  const isResults = arr.every(x => x && x.bet_id && x.winning_option);
+  const isBets = arr.every(x => x && x.category && x.question);
+  if (isResults) return { kind: "results", arr };
+  if (isBets) return { kind: "bets", arr };
+  throw new Error("Nie rozpoznaję formatu — to nie są ani nowe zakłady, ani wyniki");
 }
 
-async function addBets() {
+async function submitInput() {
   const msg = $("addMsg");
-  let body;
-  try { body = parseInput($("betsInput").value); }
+  let parsed;
+  try { parsed = parseInput($("betsInput").value); }
   catch (e) { return show(msg, "Błąd formatu JSON: " + e.message, false); }
   try {
-    const r = await fetch("/api/admin/bets", { method:"POST", headers:hdrs(), body:JSON.stringify(body) });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.detail || r.status);
-    show(msg, `Dodano ${j.created} zakład(y) ✓`, true);
+    if (parsed.kind === "bets") {
+      const r = await fetch("/api/admin/bets", { method:"POST", headers:hdrs(),
+        body:JSON.stringify({ bets: parsed.arr }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || r.status);
+      show(msg, `Dodano ${j.created} zakład(y) ✓`, true);
+    } else {
+      const known = parsed.arr.filter(x => x.winning_option === "a" || x.winning_option === "b");
+      const summary = known.map(x => {
+        const b = cachedBets.find(cb => cb.bet_id === x.bet_id);
+        const label = b ? b.options.find(o => o.key === x.winning_option)?.label : x.winning_option;
+        return `• ${b ? b.question : x.bet_id} → ${label}`;
+      }).join("\n");
+      if (!known.length) return show(msg, "AI nie ustaliło żadnego wyniku (same \"unknown\") — nic nie rozstrzygam.", true);
+      if (!confirm(`Rozstrzygnąć ${known.length} zakład(y)?\n\n${summary}\n\nTego nie da się cofnąć — monety zostaną wypłacone.`)) return;
+      const r = await fetch("/api/admin/bets/resolve-batch", { method:"POST", headers:hdrs(),
+        body:JSON.stringify({ results: parsed.arr }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || r.status);
+      show(msg, j.results.map(x => `${x.status}: ${x.detail || ""} (${x.bet_id})`).join("\n"), true);
+    }
     $("betsInput").value = "";
     loadBets();
   } catch (e) { show(msg, "Błąd: " + e.message, false); }
+}
+
+function copyResultsPrompt() {
+  const msg = $("addMsg");
+  const now = new Date();
+  const toCheck = cachedBets.filter(b => !b.resolved && new Date(b.closes_at) < now);
+  if (!toCheck.length) return show(msg, "Brak zamkniętych, nierozstrzygniętych zakładów do sprawdzenia. (Odśwież listę, jeśli coś powinno tu być.)", false);
+  const lines = toCheck.map(b => {
+    const [a, o] = b.options;
+    return `- bet_id: "${b.bet_id}" | pytanie: "${b.question}"${b.subtitle ? " (" + b.subtitle + ")" : ""} | opcja "a": ${a.label} | opcja "b": ${o.label} | zamknięty: ${new Date(b.closes_at).toLocaleString("pl-PL")}`;
+  }).join("\n");
+  const today = now.toLocaleDateString("pl-PL", { year:"numeric", month:"long", day:"numeric" });
+  const prompt = `Dzisiaj jest ${today}. Sprawdź w internecie faktyczne wyniki poniższych wydarzeń i ustal, która opcja wygrała. Szukaj wiarygodnych źródeł (wyniki meczów, oficjalne ogłoszenia, wiarygodne serwisy informacyjne).
+
+${lines}
+
+Odpowiedz WYŁĄCZNIE poprawnym JSON-em (bez tekstu przed ani po):
+
+[
+  {"bet_id": "...", "winning_option": "a", "reason": "krótkie uzasadnienie ze źródłem"}
+]
+
+Zasady:
+- "winning_option" to "a" albo "b" TYLKO jeśli masz pewność poparty źródłem.
+- Jeśli wynik nie jest jeszcze znany albo nie możesz go zweryfikować, wpisz "unknown".
+- Nigdy nie zgaduj.`;
+  navigator.clipboard.writeText(prompt).then(() => {
+    show(msg, `Prompt z ${toCheck.length} zakładami skopiowany — wklej do AI z dostępem do internetu (np. ChatGPT, Gemini), a odpowiedź wklej w pole powyżej.`, true);
+  });
 }
 
 async function loadBets() {
@@ -141,6 +198,7 @@ async function loadBets() {
     const r = await fetch("/api/admin/bets", { headers:hdrs() });
     const j = await r.json();
     if (!r.ok) throw new Error(j.detail || r.status);
+    cachedBets = j.bets;
     if (!j.bets.length) { box.innerHTML = '<div class="mut">Brak zakładów.</div>'; return; }
     box.innerHTML = j.bets.map(b => {
       const closes = new Date(b.closes_at);
