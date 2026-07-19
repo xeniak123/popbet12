@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.popwager.szetmj",
+      "bundleIdentifier": "com.xeniak.popbet",
       "infoPlist": {
         "NSContactsUsageDescription": "Znajdź znajomych, z którymi chcesz rywalizować.",
         "NSPhotoLibraryUsageDescription": "Zapisuj i udostępniaj grafiki z wynikami.",
@@ -23,7 +23,7 @@
         "backgroundColor": "#FAFAF7"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.emergent.popwager.szetmj",
+      "package": "com.xeniak.popbet",
       "permissions": [
         "READ_CONTACTS",
         "android.permission.READ_CONTACTS",
