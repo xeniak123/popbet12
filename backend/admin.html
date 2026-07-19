@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PopBet — Admin</title>
+<style>
+  :root { --bg:#0f1115; --card:#1a1d24; --line:#2a2e38; --txt:#e8eaf0; --mut:#9aa1af;
+          --acc:#5B9BD5; --ok:#4caf7d; --bad:#e05d5d; --warn:#e0b84e; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--txt); }
+  .wrap { max-width:860px; margin:0 auto; padding:24px 16px 80px; }
+  h1 { font-size:22px; margin:0 0 4px; } h1 span { color:var(--acc); }
+  h2 { font-size:16px; margin:28px 0 10px; }
+  .mut { color:var(--mut); font-size:13px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-top:10px; }
+  input[type=password], textarea { width:100%; background:#12141a; color:var(--txt); border:1px solid var(--line);
+    border-radius:8px; padding:10px; font-size:14px; }
+  textarea { min-height:180px; font-family:Consolas,monospace; resize:vertical; }
+  button { background:var(--acc); color:#fff; border:0; border-radius:8px; padding:9px 14px; font-size:14px;
+    cursor:pointer; margin:6px 6px 0 0; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--txt); }
+  button.ok { background:var(--ok); } button.bad { background:var(--bad); }
+  button:disabled { opacity:.5; cursor:default; }
+  .msg { margin-top:10px; padding:10px; border-radius:8px; font-size:14px; display:none; white-space:pre-wrap; }
+  .msg.ok { display:block; background:#153524; color:#9fe0b8; }
+  .msg.err { display:block; background:#3a1a1a; color:#f0a8a8; }
+  .bet { border-top:1px solid var(--line); padding:12px 0; }
+  .bet:first-child { border-top:0; }
+  .q { font-weight:600; } .tag { font-size:12px; color:var(--mut); }
+  .opts { margin:6px 0; font-size:14px; }
+  .resolved { color:var(--ok); font-size:13px; }
+  .closed { color:var(--warn); font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎲 PopBet <span>Admin</span></h1>
+  <div class="mut">Panel do dodawania i rozstrzygania zakładów</div>
+
+  <h2>🔑 Klucz admina</h2>
+  <div class="card">
+    <input id="key" type="password" placeholder="Wklej ADMIN_KEY">
+    <button onclick="saveKey()">Zapisz klucz</button>
+    <span id="keyState" class="mut"></span>
+  </div>
+
+  <h2>➕ Dodaj zakłady</h2>
+  <div class="card">
+    <div class="mut" style="margin-bottom:8px">
+      Wklej JSON z zakładami (możesz wkleić prosto z czatu AI — znaczniki ```json są ignorowane).
+      Nie wiesz jak ma wyglądać? Kliknij „Kopiuj prompt dla AI”, wklej do ChatGPT/Claude'a i odeślij mi wynik tutaj.
+    </div>
+    <textarea id="betsInput" placeholder='[
+  {
+    "category": "sport",
+    "question": "Kto wygra mecz X vs Y?",
+    "subtitle": "Liga Mistrzów",
+    "option_a": "X",
+    "option_b": "Y",
+    "closes_in_hours": 24
+  }
+]'></textarea>
+    <button onclick="addBets()">Dodaj zakłady</button>
+    <button class="ghost" onclick="copyPrompt()">📋 Kopiuj prompt dla AI</button>
+    <div id="addMsg" class="msg"></div>
+  </div>
+
+  <h2>📋 Zakłady <button class="ghost" style="font-size:12px;padding:5px 10px" onclick="loadBets()">Odśwież</button></h2>
+  <div class="card" id="betList"><div class="mut">Zapisz klucz admina, żeby zobaczyć listę.</div></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const keyInput = $("key");
+keyInput.value = localStorage.getItem("popbet_admin_key") || "";
+
+function hdrs() {
+  return { "Content-Type": "application/json", "X-Admin-Key": keyInput.value.trim() };
+}
+function saveKey() {
+  localStorage.setItem("popbet_admin_key", keyInput.value.trim());
+  $("keyState").textContent = " zapisano ✓";
+  loadBets();
+}
+function show(el, text, ok) {
+  el.className = "msg " + (ok ? "ok" : "err");
+  el.textContent = text;
+}
+
+const CATS = { sport:"⚽ Sport", awards:"🏆 Nagrody", reality_tv:"📺 Reality TV", gossip:"💬 Plotki", music:"🎤 Muzyka" };
+
+function copyPrompt() {
+  const today = new Date().toLocaleDateString("pl-PL", { year:"numeric", month:"long", day:"numeric" });
+  const prompt = `Dzisiaj jest ${today}. Wygeneruj 5 zakładów typu "co się wydarzy" do polskiej aplikacji rozrywkowej PopBet (zakłady za wirtualne monety, bez prawdziwych pieniędzy). Zakłady mają dotyczyć aktualnych, prawdziwych wydarzeń: sport, muzyka, nagrody, reality TV, plotki o gwiazdach. Każdy zakład ma DOKŁADNIE dwie opcje i musi rozstrzygać się w ciągu najbliższych dni.
+
+Odpowiedz WYŁĄCZNIE poprawnym JSON-em w tym formacie (bez żadnego tekstu przed ani po):
+
+[
+  {
+    "category": "sport",            // jedno z: sport, awards, reality_tv, gossip, music
+    "question": "Kto wygra ...?",   // pytanie po polsku, max 80 znaków
+    "subtitle": "np. nazwa ligi",   // krótki podtytuł
+    "option_a": "Pierwsza opcja",
+    "option_b": "Druga opcja",
+    "closes_in_hours": 24           // po ilu godzinach zakład się zamyka
+  }
+]`;
+  navigator.clipboard.writeText(prompt).then(() => {
+    show($("addMsg"), "Prompt skopiowany — wklej go do AI, a wynik wklej w pole powyżej.", true);
+  });
+}
+
+function parseInput(raw) {
+  let t = raw.trim();
+  t = t.replace(/^```(json)?/i, "").replace(/```$/,"").trim();
+  const data = JSON.parse(t);
+  if (Array.isArray(data)) return { bets: data };
+  if (data && Array.isArray(data.bets)) return data;
+  throw new Error("Oczekiwano tablicy JSON z zakładami");
+}
+
+async function addBets() {
+  const msg = $("addMsg");
+  let body;
+  try { body = parseInput($("betsInput").value); }
+  catch (e) { return show(msg, "Błąd formatu JSON: " + e.message, false); }
+  try {
+    const r = await fetch("/api/admin/bets", { method:"POST", headers:hdrs(), body:JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || r.status);
+    show(msg, `Dodano ${j.created} zakład(y) ✓`, true);
+    $("betsInput").value = "";
+    loadBets();
+  } catch (e) { show(msg, "Błąd: " + e.message, false); }
+}
+
+async function loadBets() {
+  const box = $("betList");
+  try {
+    const r = await fetch("/api/admin/bets", { headers:hdrs() });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || r.status);
+    if (!j.bets.length) { box.innerHTML = '<div class="mut">Brak zakładów.</div>'; return; }
+    box.innerHTML = j.bets.map(b => {
+      const closes = new Date(b.closes_at);
+      const isClosed = closes < new Date();
+      const [a, o] = b.options;
+      const pool = a.stake_total + o.stake_total;
+      let status;
+      if (b.resolved) {
+        const win = b.options.find(x => x.key === b.winning_option);
+        status = `<span class="resolved">✔ rozstrzygnięty — wygrało: ${esc(win ? win.label : b.winning_option)}</span>`;
+      } else if (isClosed) {
+        status = `<span class="closed">⏳ zamknięty, czeka na rozstrzygnięcie</span>`;
+      } else {
+        status = `<span class="mut">otwarty do ${closes.toLocaleString("pl-PL")}</span>`;
+      }
+      const buttons = b.resolved ? "" : `
+        <button class="ok" onclick="resolveBet('${b.bet_id}','a','${esc(a.label)}')">Wygrała: ${esc(a.label)}</button>
+        <button class="ok" onclick="resolveBet('${b.bet_id}','b','${esc(o.label)}')">Wygrała: ${esc(o.label)}</button>
+        <button class="bad" onclick="delBet('${b.bet_id}')">Usuń</button>`;
+      return `<div class="bet">
+        <div class="q">${esc(b.question)}</div>
+        <div class="tag">${CATS[b.category] || b.category}${b.subtitle ? " · " + esc(b.subtitle) : ""}</div>
+        <div class="opts">A: <b>${esc(a.label)}</b> (${a.stake_total} 🪙, ${a.voters} os.) &nbsp;|&nbsp;
+                          B: <b>${esc(o.label)}</b> (${o.stake_total} 🪙, ${o.voters} os.) &nbsp;|&nbsp; pula: ${pool} 🪙</div>
+        <div>${status}</div>${buttons}
+      </div>`;
+    }).join("");
+  } catch (e) { box.innerHTML = `<div class="msg err" style="display:block">Błąd: ${esc(e.message)}</div>`; }
+}
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+async function resolveBet(id, opt, label) {
+  if (!confirm(`Rozstrzygnąć: wygrała opcja „${label}"? Tego nie da się cofnąć — monety zostaną wypłacone.`)) return;
+  try {
+    const r = await fetch(`/api/bets/${id}/resolve`, { method:"POST", headers:hdrs(),
+      body:JSON.stringify({ winning_option: opt }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || r.status);
+    loadBets();
+  } catch (e) { alert("Błąd: " + e.message); }
+}
+
+async function delBet(id) {
+  if (!confirm("Usunąć zakład? Obstawione monety wrócą do graczy.")) return;
+  try {
+    const r = await fetch(`/api/admin/bets/${id}`, { method:"DELETE", headers:hdrs() });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || r.status);
+    loadBets();
+  } catch (e) { alert("Błąd: " + e.message); }
+}
+
+if (keyInput.value) loadBets();
+</script>
+</body>
+</html>

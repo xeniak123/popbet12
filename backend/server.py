@@ -1,6 +1,7 @@
 """PopBet backend — pop-culture prediction market with fictional coins."""
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 import uuid
@@ -28,6 +29,9 @@ JWT_SECRET = os.environ.get("JWT_SECRET", "dev-only-secret")
 JWT_ALG = os.environ.get("JWT_ALG", "HS256")
 ACCESS_TOKEN_DAYS = int(os.environ.get("ACCESS_TOKEN_DAYS", "30"))
 EMERGENT_PUSH_KEY = os.environ.get("EMERGENT_PUSH_KEY", "placeholder")
+# Klucz do panelu /admin i endpointów administracyjnych. Gdy pusty, admin jest wyłączony
+# (a resolve działa bez klucza — tryb deweloperski/testowy).
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
 PUSH_BASE_URL = "https://integrations.emergentagent.com"
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -168,9 +172,34 @@ class ResolveIn(BaseModel):
     winning_option: str  # "a" or "b"
 
 
+VALID_CATEGORIES = ("sport", "awards", "reality_tv", "gossip", "music")
+
+
+class AdminBetIn(BaseModel):
+    category: str
+    question: str
+    subtitle: Optional[str] = None
+    option_a: str
+    option_b: str
+    closes_in_hours: Optional[float] = Field(default=None, gt=0, le=24 * 365)
+    closes_at: Optional[datetime] = None
+    image_url: Optional[str] = None
+
+
+class AdminBetsImportIn(BaseModel):
+    bets: List[AdminBetIn]
+
+
 # ---------- helpers ----------
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def require_admin(x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key")) -> None:
+    if not ADMIN_KEY:
+        raise HTTPException(status_code=503, detail="Panel admina wyłączony — ustaw zmienną ADMIN_KEY")
+    if not x_admin_key or not hmac.compare_digest(x_admin_key, ADMIN_KEY):
+        raise HTTPException(status_code=401, detail="Nieprawidłowy klucz admina")
 
 
 def make_id(prefix: str) -> str:
@@ -695,9 +724,15 @@ async def my_bets(status: str = Query(default="active"), user: dict = Depends(ge
     return out
 
 
-# --- resolve (test helper — no auth to allow easy demo/testing) ---
+# --- resolve (z kluczem admina, jeśli ADMIN_KEY ustawiony; bez klucza tylko w trybie dev) ---
 @app.post("/api/bets/{bet_id}/resolve")
-async def resolve_bet(bet_id: str, payload: ResolveIn):
+async def resolve_bet(
+    bet_id: str,
+    payload: ResolveIn,
+    x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
+):
+    if ADMIN_KEY and (not x_admin_key or not hmac.compare_digest(x_admin_key, ADMIN_KEY)):
+        raise HTTPException(status_code=401, detail="Nieprawidłowy klucz admina")
     bet = await db.bets.find_one({"bet_id": bet_id}, {"_id": 0})
     if not bet:
         raise HTTPException(status_code=404, detail="Zakład nie istnieje")
@@ -1195,3 +1230,83 @@ async def register_push(payload: RegisterPushIn, user: dict = Depends(get_curren
         {"$addToSet": {"push_tokens": {"platform": payload.platform, "token": payload.device_token}}},
     )
     return {"status": "registered"}
+
+
+# --- admin ---
+@app.post("/api/admin/bets", status_code=201)
+async def admin_add_bets(payload: AdminBetsImportIn, _: None = Depends(require_admin)):
+    if not payload.bets:
+        raise HTTPException(status_code=400, detail="Pusta lista zakładów")
+    now = now_utc()
+    docs = []
+    errors = []
+    for i, b in enumerate(payload.bets, start=1):
+        if b.category not in VALID_CATEGORIES:
+            errors.append(f"Zakład {i}: nieznana kategoria '{b.category}' (dozwolone: {', '.join(VALID_CATEGORIES)})")
+            continue
+        if not b.question.strip() or not b.option_a.strip() or not b.option_b.strip():
+            errors.append(f"Zakład {i}: question/option_a/option_b nie mogą być puste")
+            continue
+        closes_at = b.closes_at
+        if closes_at is None:
+            closes_at = now + timedelta(hours=b.closes_in_hours or 24)
+        elif closes_at.tzinfo is None:
+            closes_at = closes_at.replace(tzinfo=timezone.utc)
+        if closes_at <= now:
+            errors.append(f"Zakład {i}: data zamknięcia jest w przeszłości")
+            continue
+        docs.append({
+            "bet_id": make_id("bet"),
+            "category": b.category,
+            "question": b.question.strip(),
+            "subtitle": (b.subtitle or "").strip() or None,
+            "options": [
+                {"key": "a", "label": b.option_a.strip(), "stake_total": 0, "voters": 0},
+                {"key": "b", "label": b.option_b.strip(), "stake_total": 0, "voters": 0},
+            ],
+            "closes_at": closes_at,
+            "created_at": now,
+            "resolved": False,
+            "winning_option": None,
+            "image_url": b.image_url,
+        })
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    await db.bets.insert_many(docs)
+    for d in docs:
+        d.pop("_id", None)
+    return {"ok": True, "created": len(docs), "bets": docs}
+
+
+@app.get("/api/admin/bets")
+async def admin_list_bets(_: None = Depends(require_admin)):
+    bets = await db.bets.find({}, {"_id": 0}).sort([("resolved", 1), ("closes_at", 1)]).to_list(500)
+    return {"bets": bets}
+
+
+@app.delete("/api/admin/bets/{bet_id}")
+async def admin_delete_bet(bet_id: str, _: None = Depends(require_admin)):
+    bet = await db.bets.find_one({"bet_id": bet_id}, {"_id": 0})
+    if not bet:
+        raise HTTPException(status_code=404, detail="Zakład nie istnieje")
+    if bet.get("resolved"):
+        raise HTTPException(status_code=400, detail="Zakład już rozstrzygnięty — nie można usunąć")
+    # zwrot monet za nierozstrzygnięte kupony
+    placements = await db.placements.find({"bet_id": bet_id}, {"_id": 0}).to_list(1000)
+    refunded = 0
+    for p in placements:
+        if not p.get("resolved"):
+            await db.users.update_one({"user_id": p["user_id"]}, {"$inc": {"coins": p["stake"]}})
+            refunded += 1
+    await db.placements.delete_many({"bet_id": bet_id})
+    await db.bets.delete_one({"bet_id": bet_id})
+    return {"ok": True, "refunded_placements": refunded}
+
+
+@app.get("/admin", include_in_schema=False)
+async def admin_page():
+    from fastapi.responses import HTMLResponse
+    path = ROOT_DIR / "admin.html"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="admin.html nie znaleziony")
+    return HTMLResponse(path.read_text(encoding="utf-8"))

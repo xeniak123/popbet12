@@ -16,5 +16,8 @@ services:
         value: popbet_database
       - key: JWT_SECRET
         generateValue: true
+      - key: ADMIN_KEY
+        sync: false # wklej wlasny klucz w panelu Render
+
       - key: ACCESS_TOKEN_DAYS
         value: "30"
