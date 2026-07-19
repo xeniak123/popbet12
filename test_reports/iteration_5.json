@@ -1,0 +1,46 @@
+{
+  "summary": "PopBet iter5 (user-reported bug fixes) — all verified. BUG FIX 1 (remove Google button): Confirmed via UI automation that [data-testid=auth-google-button] is ABSENT on both signup and login tabs, 'Kontynuuj z Google' text and 'lub' divider have 0 occurrences on both tabs. [data-testid=forgot-password-link] still visible on Login tab. Signup → auto-login regression: created fresh user ui_iter5_<ts>@popbet.dev with pw secret123, redirected into /(tabs), Home shows +1000 coins balance, daily-streak card, and market card — no console error re: googleSignIn. BUG FIX 2 (GitHub-clone .env flow): static inspection confirmed /app/frontend/.env.example exists with `EXPO_PUBLIC_BACKEND_URL=` placeholder + Polish setup comments, /app/frontend/SETUP.md exists (Polish, step-by-step, covers preview URL + emergent.host + local FastAPI + known gotchas), /app/.gitignore line 85 has `!.env.example` whitelist (with `.env`/`*.env` blocked lines 83/84/86), /app/frontend/src/api/client.ts exports HAS_BACKEND_URL (line 6) and assertBackend() throws Polish 'Brak adresu backendu. Utwórz plik frontend/.env...' message (line 25-32), /app/frontend/app/index.tsx renders full-screen setup guide with testID='missing-backend-url-screen' + emoji + 3-step card (cp .env.example .env / set EXPO_PUBLIC_BACKEND_URL / npx expo start --clear) when HAS_BACKEND_URL is false. Preview env has EXPO_PUBLIC_BACKEND_URL set correctly so the guard screen is not runtime-triggered — verified only by static inspection as instructed. Backend regression: 14/14 iter4 + 18/18 iter2 = 32/32 all green.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow* style props", "issue": "Console warning 'shadow* style props are deprecated. Use boxShadow.' still emitted on every screen load. Carry-over from iter2/iter3/iter4. Reference: /app/frontend/src/theme/colors.ts."},
+      {"component": "pointerEvents prop", "issue": "Console warning 'props.pointerEvents is deprecated. Use style.pointerEvents'. Reference: /app/frontend/app/onboarding.tsx reward overlay (line 320). Carry-over from iter2."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_popbet_iter4.py",
+    "/app/backend/tests/test_popbet_iter2.py",
+    "/app/test_reports/pytest/pytest_iter5_results.xml"
+  ],
+  "action_items": [
+    "(Nice-to-have, persists 4 iterations) Migrate deprecated shadow* → boxShadow in /app/frontend/src/theme/colors.ts.",
+    "(Nice-to-have, persists 4 iterations) Move pointerEvents='none' from prop to style in /app/frontend/app/onboarding.tsx reward overlay.",
+    "(Optional) The runtime guard screen in /app/frontend/app/index.tsx cannot be tested without unsetting EXPO_PUBLIC_BACKEND_URL in the preview env (would break every other test). Consider a `?forceMissingBackend=1` query flag for QA if this ever regresses, but not required — static inspection confirms it's wired correctly.",
+    "(Optional) loginWithGoogle is still exposed on AuthContext (AuthContext.tsx:25,95,121) even though the UI entry point was removed. Fine per problem statement (kept for future re-enable), but a comment `// TODO: re-enable when Google auth is re-wired` next to line 25 would help future maintainers."
+  ],
+  "critical_code_review_comments": [
+    "/app/frontend/.env.example (12): sets `EXPO_PUBLIC_BACKEND_URL=https://your-backend.example.com` as an obviously-placeholder URL — good, won't be mistaken for a working default.",
+    "/app/.gitignore ordering (83-86): `.env` and `*.env` are blocked, then `!.env.example` un-ignores it — order is correct so the whitelist wins.",
+    "/app/frontend/src/api/client.ts (5-6): trims trailing slashes AND checks !!BASE_URL for HAS_BACKEND_URL — handles both undefined and whitespace-only env values.",
+    "/app/frontend/src/api/client.ts (25-32,35,45,63): assertBackend() is called in every request path (apiGet, apiPost, apiRequest) — cannot be bypassed.",
+    "/app/frontend/app/index.tsx (13-37): setup guide uses SafeAreaView + ScrollView so it survives keyboard/small-screen without overflow; testID='missing-backend-url-screen' is stable for QA.",
+    "/app/frontend/app/onboarding.tsx: no residual `Kontynuuj z Google` / `lub` markup. Verified via grep + runtime DOM count (0 occurrences on both tabs).",
+    "/app/frontend/SETUP.md: covers both Emergent-deployed backend AND local FastAPI+MongoDB fallback (with LAN-IP gotcha for Expo Go). Good docs."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (14/14 iter4 + 18/18 iter2 regression = 32/32)",
+    "frontend": "100% — Google button absence verified on both signup+login tabs, 'lub' divider verified absent, forgot-password-link still visible, signup→auto-login→tabs still works end-to-end. Static inspection of index.tsx guard screen + client.ts HAS_BACKEND_URL/assertBackend + .env.example + SETUP.md + .gitignore whitelist all confirmed."
+  },
+  "seed_data_creation": "One throwaway UI signup: ui_iter5_<unix_ts>@popbet.dev / secret123. Backend tests use per-test TEST_iter4_<uuid>@popbet.dev users (unchanged from iter4).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter5 was a bug-fix pass (no new features). All 32 backend regression tests still green — reuse /app/backend/tests/test_popbet_iter4.py and test_popbet_iter2.py. UI: onboarding.tsx has no Google references; loginWithGoogle is retained in AuthContext for future re-enable per problem statement. Preview .env has EXPO_PUBLIC_BACKEND_URL set, so /app/frontend/app/index.tsx's missing-backend-url-screen is only reachable if that var is unset — verify via static inspection. shadow*/pointerEvents deprecation warnings persist (4 iterations now, main agent knows).",
+  "rca_of_issue": "N/A — user-reported bugs (network-fails-after-github-clone + emergent branding leak on Google button) were both correctly fixed by the main agent: (a) .env.example + SETUP.md + gitignore whitelist + HAS_BACKEND_URL guard, (b) removed Google button + divider from onboarding. Both fixes verified working."
+}

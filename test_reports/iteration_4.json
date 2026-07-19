@@ -1,0 +1,48 @@
+{
+  "summary": "PopBet iter4 (release-ready features) — full backend + frontend pass. Backend: new /app/backend/tests/test_popbet_iter4.py has 14/14 passing (forgot/reset flow, change-password, PATCH /api/profile, DELETE /api/account, all happy + error paths). Iter2 regression 18/18 still green. Frontend: end-to-end walked forgot→reset→auto-login (lands on /(tabs)), Settings shows new 'Konto — edycja' + Legal + 'Strefa niebezpieczna' sections, edit-profile updates username+phone (verified via /me), change-password shows 'Hasło zmienione ✅' toast + login works with new pw, /legal renders Regulamin + Polityka prywatności + Kontakt cards, /delete-account with ack+password returns user to /onboarding with 'Konto usunięte' toast (subsequent login → 401). Markets empty category (Muzyka) renders new EmptyState (emoji + title + subtitle + 'Zobacz wszystkie' CTA). MyBets empty state renders new 🎯 + 'Brak aktywnych zakładów'. Placing a bet reduces coin balance and shows 'Obstawione' locked card. Toast provider working across all destructive flows. Deprecated console warnings (shadow*, pointerEvents) persist — carry-over from iter2.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow* style props", "issue": "Console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Still emitted on every screen load. Reference: /app/frontend/src/theme/colors.ts and shadow consumers (carry-over from iter2 iteration_3.json action_items)."},
+      {"component": "pointerEvents prop", "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Reference: /app/frontend/app/onboarding.tsx reward overlay (carry-over from iter2)."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_popbet_iter4.py",
+    "/app/backend/tests/test_popbet_iter2.py",
+    "/app/test_reports/pytest/pytest_iter4_results.xml"
+  ],
+  "action_items": [
+    "(Nice-to-have) Migrate deprecated shadow* → boxShadow in /app/frontend/src/theme/colors.ts and downstream consumers (persists from iter2/iter3 as unaddressed).",
+    "(Nice-to-have) Move pointerEvents='none' from prop to style in /app/frontend/app/onboarding.tsx reward overlay (persists from iter2).",
+    "(Legacy) /app/backend/tests/test_popbet_backend.py (iter1) still references the removed POST /api/friends/add endpoint — delete or migrate to /api/friends/request+accept.",
+    "(Optional) forgot_password endpoint returns delivery:'email' when the email is unknown but delivery:'in_app' when known — this is a mild info-leak vector (client can distinguish). If tightening is desired, always return the same delivery string. Not blocking release."
+  ],
+  "critical_code_review_comments": [
+    "server.py:474 forgot_password uses uuid.uuid4().hex + uuid.uuid4().hex[:8] (40 hex chars = 160 bits) — good entropy.",
+    "server.py:497 reset_password guards used/expired tokens correctly and re-fetches user after update before issuing JWT — clean.",
+    "server.py:520 change_password rejects same-as-current with 400 before hashing — good.",
+    "server.py:534 update_profile handles username-uniqueness with 409, phone_normalized recomputed symmetrically with signup path, avatar accepts both bare-b64 and data-URI — good.",
+    "server.py:564 delete_account cascades placements/friendships/friend_requests/password_resets/transfers before removing the user document — GDPR-friendly. Consider also deleting from db.push_tokens if it lives outside the users doc (currently push_tokens is embedded in user, so it goes away with the user delete — fine).",
+    "forgot_password: 'delivery' field is 'email' for unknown users but 'in_app' for known ones (server.py:481 vs 494) — minor info-leak channel (see action_items).",
+    "delete-account UI: /app/frontend/app/delete-account.tsx correctly requires password for non-Google users and ack checkbox — matches backend contract."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_popbet_iter4.py (new, 14 tests, all passing)"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 iter4 + 18/18 iter2 regression = 32/32)",
+    "frontend": "100% of iter4 flows tested (forgot→reset→login, settings sections, edit-profile, change-password, legal, delete-account, empty state on empty market category, my-bets empty state, bet placement via API)"
+  },
+  "seed_data_creation": "Per test, a throwaway account (TEST_iter4_<uuid>@popbet.dev or ui_iter4_<uuid>@popbet.dev) is created via /api/auth/signup. UI test users are cleaned up as part of the delete-account test where relevant; other TEST_iter4 users remain in DB but are prefixed for easy identification.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter4 test file is /app/backend/tests/test_popbet_iter4.py — reuse for future regressions. Toast provider verified working (change-password and delete-account both surface success toasts). Empty-state UI verified on Muzyka category (had no bets). Deprecated shadow*/pointerEvents warnings still emitted on every screen — main agent has been notified for three iterations now. streaker1@popbet.com password NOT touched (all destructive tests used throwaway ui_iter4_* accounts as instructed).",
+  "rca_of_issue": "N/A — feature iteration, no bugs found. Two test-only failures were self-inflicted (assumed non-lowercased email and used the same user's token to look up their own phone via find-by-phones which excludes self); fixed and all green."
+}

@@ -1,0 +1,55 @@
+{
+  "summary": "PopBet iteration 2 tested end-to-end (backend + mobile UI 390x844). Backend: 16/16 new pytest tests passed (streak status/checkin+409, mutual friends request/accept/reject/auto-accept, phone find last-9-digit, coin transfer success/self/insufficient/unknown, google-session invalid → 401, /me returns streak_days/best_streak/phone, signup accepts optional phone). Frontend: bug fix VALIDATED — Settings → 'Wyloguj się' → confirm 'Wyloguj' now redirects to onboarding immediately (no reload) thanks to (tabs)/_layout.tsx <Redirect> guard on !user. Also verified: Google button + phone input on auth, StreakCard on Markets (days 1-7, claim flips to 'Odebrano dzisiaj ✓' and coins 1000→1050), profile → settings icon opens Settings screen with all sections + push toggle + transfer/friends links + logout, share-template picker (3 options), transfer screen (balance pill, recipient input, 50/100/250/500 chips, Wyślij CTA), leaderboard Friends tab + add-friend modal (Znajdź w kontaktach + username input + submit). One backend bug detected in find-by-phones (documented). Deprecated shadow*/pointerEvents warnings persist from iter1.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/friends/find-by-phones",
+        "issue": "Server normalizes the *search input* to digits-only but does NOT normalize the *stored phone* at signup. A user who signed up with '+48 501 234 567' (with spaces) will never be found because the last-9-digit regex is matched against the raw stored phone that contains spaces. Fix: normalize phone at signup with _normalize_phone(payload.phone) before storing, OR run an aggregation with $regex on a computed digits-only field. Reference: server.py:405 (signup) and server.py:829 (find-by-phones)."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "shadow* style props",
+        "issue": "Still emitting console.warn: '\"shadow*\" style props are deprecated. Use \"boxShadow\"'. Iter1 action item remains open. Reference: /app/frontend/src/theme/colors.ts (shadow.soft / shadow.softer used across screens)."
+      },
+      {
+        "component": "props.pointerEvents",
+        "issue": "Still emitting console.warn: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Iter1 action item remains open. Reference: /app/frontend/app/onboarding.tsx (reward overlay View)."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_popbet_iter2.py",
+    "/app/backend/tests/test_popbet_backend.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_iter2_results.xml"
+  ],
+  "action_items": [
+    "Normalize phone to digits-only at signup (server.py:405) so find-by-phones matches stored users who submitted formatted phones. Alternatively store a computed `phone_digits` field and $regex against it.",
+    "(Carry-over from iter1) Migrate shadow* to boxShadow in /app/frontend/src/theme/colors.ts and any consumers.",
+    "(Carry-over from iter1) Move pointerEvents='none' from prop to style in onboarding reward overlay.",
+    "Note: iter1's test_popbet_backend.py still calls the removed POST /api/friends/add endpoint (TestLeaderboardAndFriends). Those 4 tests will regress. Either update them to /api/friends/request + /accept, or delete since iter2 file covers the mutual-friend flow."
+  ],
+  "critical_code_review_comments": [
+    "server.py find-by-phones stores non-normalized phones — the endpoint's own docstring comment says 'match by last 9 digits (Polish mobile) to be lenient', but the leniency only applies to the search side, not the stored side.",
+    "server.py google_session: on Emergent 5xx the code raises 502 'Emergent auth niedostępne', but network exception path also collapses to 502; consider distinguishing.",
+    "settings.tsx: `doLogout` calls both `logout()` and `router.replace('/onboarding')`. With the new tab-layout guard, the router.replace is redundant (guard already redirects). Harmless but worth noting.",
+    "server.py streak_checkin: passes if last is a str via fromisoformat; MongoDB returns datetime objects so the str branch is defensive-only — OK.",
+    "streak endpoints correctly gate on UTC-day boundaries — confirmed by tests."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_popbet_iter2.py (new)"
+  ],
+  "success_rate": {"backend": "100% (16/16 new iter2 tests)", "frontend": "100% of tested flows — logout bug FIX VERIFIED, all iter2 UI features present"},
+  "seed_data_creation": "Iter2 tests create ~15 unique TEST_i2_* users per run (email/username uuid-suffixed) via /api/auth/signup; not cleaned up (matches iter1 pattern).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter2 UI testIDs: streak-card, streak-day-{1..7}, streak-claim-button; settings-link (profile header), settings-account-card, settings-push-toggle, settings-transfer-link, settings-friends-link, settings-logout-button, settings-logout-confirm/cancel; transfer-username-input, transfer-amount-input, transfer-quick-{50|100|250|500}, transfer-submit, transfer-friend-<user_id>; leaderboard-tab-friends, pending-requests-card, pending-accept-<req_id>, pending-reject-<req_id>, add-friend-button, contacts-import-button, add-friend-username-input, add-friend-submit, match-<user_id>, match-invite-<user_id>; auth-google-button, auth-phone-input; profile: open-share-picker, open-transfer, template-stats/streak/biggest. Logout bug fixed via <Redirect> in (tabs)/_layout.tsx when useAuth().user is null.",
+  "rca_of_issue": "LOGOUT BUG (fixed & validated): Previously, logout() cleared user in AuthContext but the tab screens remained mounted; UI showed 0 coins yet user was still 'inside' the tabs stack until a full reload re-evaluated Expo Router. Fix in /app/frontend/app/(tabs)/_layout.tsx: `if (!loading && !user) return <Redirect href='/onboarding' />;` — the tabs layout re-renders on AuthContext change, detects null user, and immediately routes to onboarding without needing a reload. Confirmed in playwright test: clicking 'Wyloguj' in confirm modal lands on onboarding slide (data-testid='onboarding-next-button' present) within ~2s. PHONE MATCHING BUG (found, not fixed): server normalizes only the search phones, not the stored ones; users who signed up with any non-digit chars in their phone are unfindable. Mitigation: normalize on write."
+}

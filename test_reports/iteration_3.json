@@ -1,0 +1,38 @@
+{
+  "summary": "PopBet iter3 (backend only) — phone-normalization fix VERIFIED. Ran the full iter2 regression suite plus 2 new tests targeting the fix and 1 for irrelevant-phone edge case. 18/18 passed. Signup now stores phone_normalized (digits-only) and find-by-phones correctly matches across arbitrary formatting (spaces, dashes, parentheses, leading zero). Backfill on lifespan startup verified end-to-end: legacy user document inserted directly via pymongo without phone_normalized → backend restarted via supervisorctl → phone_normalized populated → user now findable by /api/friends/find-by-phones. Regression: streak status/checkin+409, mutual friend request/accept/reject/auto-accept, coin transfer success/self/insufficient/unknown, google-session invalid → 401, /me streak fields all still pass.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_popbet_iter2.py",
+    "/app/test_reports/pytest/pytest_iter3_results.xml"
+  ],
+  "action_items": [
+    "(Carry-over from iter2) Migrate shadow* to boxShadow in /app/frontend/src/theme/colors.ts and consumers.",
+    "(Carry-over from iter2) Move pointerEvents='none' from prop to style in /app/frontend/app/onboarding.tsx reward overlay.",
+    "(Carry-over from iter2) test_popbet_backend.py (iter1) still calls the removed POST /api/friends/add endpoint (TestLeaderboardAndFriends). Either delete or migrate to /api/friends/request+accept — not run this iteration.",
+    "Nice-to-have: remove the one-time backfill after it has been executed in every deployed environment (or make it idempotent+cheap — currently it re-scans on every boot but the filter {phone_normalized: {$exists: false}} keeps it O(0) after first run)."
+  ],
+  "critical_code_review_comments": [
+    "server.py:833 _normalize_phone stays digits-only and is used both at write time (signup: server.py:419) and read time (find-by-phones: server.py:839) — symmetric ✔.",
+    "server.py:362 backfill_phone_normalized filters {phone_normalized: {$exists: false}} so repeat boots are cheap; matches the 'runs once' contract.",
+    "server.py:349-350 indexes on both phone and phone_normalized — good; the last-9 suffix $regex on phone_normalized is not index-optimized (right-anchored regex isn't a prefix search) but acceptable at current user scale.",
+    "Google OAuth signup path (server.py:1013) does NOT set phone_normalized (phone is None there), which is correct — no dead field written."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_popbet_iter2.py — replaced test_stored_phone_with_spaces_not_matched_bug with fix-verification test; added test_irrelevant_phone_returns_empty and test_backfill_matches_legacy_user (uses pymongo + supervisorctl restart to exercise real backfill)."
+  ],
+  "success_rate": {"backend": "100% (18/18)", "frontend": "not tested this iteration (backend-only request)"},
+  "seed_data_creation": "Each run creates ~20 unique TEST_i2_* / TEST_legacy_* users via /api/auth/signup + one direct pymongo insert (cleaned up in finally).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Phone normalization fix confirmed working for both new signups AND legacy users via backfill. New test test_backfill_matches_legacy_user performs a real 'sudo supervisorctl restart backend' + waits on /api/health — it's slower (~5s) but validates the lifespan hook. Iter2 UI testIDs unchanged; frontend not retested this iteration.",
+  "rca_of_issue": "PHONE-MATCHING BUG (fixed & validated): Root cause was asymmetric normalization — /api/friends/find-by-phones stripped non-digits from the *search input* but signup stored phone verbatim, so any user who submitted '+48 500 111 222' was invisible to any digit-only search. Fix: (1) SignupIn handler now also stores phone_normalized = _normalize_phone(phone); (2) query switched from $regex against `phone` to `phone_normalized`; (3) one-time backfill on lifespan startup populates phone_normalized for existing users with only `phone` set. Verified by three tests: (a) new formatted signup → digit-only search matches, (b) direct-insert legacy user + backend restart → still matches, (c) unrelated phone returns empty. All 18 regression + fix tests green."
+}

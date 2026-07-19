@@ -1,0 +1,195 @@
+// My Bets - Active / Resolved tabs, win/loss chips.
+import { Ionicons } from "@expo/vector-icons";
+import React, { useCallback, useEffect, useState } from "react";
+import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { api } from "@/src/api/client";
+import { EmptyState } from "@/src/components/EmptyState";
+import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+
+type MyBet = {
+  bet_id: string;
+  category: string;
+  question: string;
+  choice: string;
+  stake: number;
+  placed_at: string;
+  resolved: boolean;
+  won?: boolean | null;
+  payout: number;
+  winning_option?: string | null;
+  closes_at: string;
+};
+
+const CATEGORY_LABEL: Record<string, string> = {
+  sport: "Sport",
+  awards: "Nagrody",
+  reality_tv: "Reality TV",
+  gossip: "Plotki",
+  music: "Muzyka",
+};
+
+export default function MyBetsScreen() {
+  const insets = useSafeAreaInsets();
+  const [tab, setTab] = useState<"active" | "resolved">("active");
+  const [items, setItems] = useState<MyBet[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async (status: "active" | "resolved") => {
+    const res = await api.get<MyBet[]>(`/api/my-bets?status=${status}`);
+    setItems(res);
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    load(tab).finally(() => setLoading(false));
+  }, [tab, load]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await load(tab); } finally { setRefreshing(false); }
+  }, [tab, load]);
+
+  return (
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Moje zakłady</Text>
+      </View>
+      <View style={styles.tabsRow}>
+        <TouchableOpacity
+          testID="mybets-tab-active"
+          onPress={() => setTab("active")}
+          style={[styles.tab, tab === "active" && styles.tabActive]}
+        >
+          <Text style={[styles.tabText, tab === "active" && styles.tabTextActive]}>Aktywne</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          testID="mybets-tab-resolved"
+          onPress={() => setTab("resolved")}
+          style={[styles.tab, tab === "resolved" && styles.tabActive]}
+        >
+          <Text style={[styles.tabText, tab === "resolved" && styles.tabTextActive]}>Rozstrzygnięte</Text>
+        </TouchableOpacity>
+      </View>
+
+      {loading && items.length === 0 ? (
+        <View style={styles.empty}><Text style={styles.emptyText}>Ładowanie…</Text></View>
+      ) : (
+        <FlatList
+          data={items}
+          keyExtractor={(i) => i.bet_id}
+          contentContainerStyle={{ padding: spacing.md, paddingBottom: 32 + insets.bottom }}
+          renderItem={({ item }) => <Row item={item} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+          ListEmptyComponent={
+            <EmptyState
+              testID={`mybets-empty-${tab}`}
+              emoji={tab === "active" ? "🎯" : "📜"}
+              title={tab === "active" ? "Brak aktywnych zakładów" : "Brak rozstrzygniętych"}
+              subtitle={
+                tab === "active"
+                  ? "Wejdź w zakładkę Rynki i postaw pierwszy zakład!"
+                  : "Twoje rozstrzygnięcia pojawią się tutaj gdy zakłady się zakończą."
+              }
+            />
+          }
+          testID="mybets-list"
+        />
+      )}
+    </SafeAreaView>
+  );
+}
+
+function Row({ item }: { item: MyBet }) {
+  const won = item.resolved && item.won === true;
+  const lost = item.resolved && item.won === false;
+
+  const badge = item.resolved
+    ? won
+      ? { bg: colors.winSoft, color: "#2E856E", label: `+${item.payout - item.stake}` }
+      : { bg: colors.lossSoft, color: "#8E3A3A", label: `-${item.stake}` }
+    : { bg: colors.primarySoft, color: colors.primary, label: `Aktywny` };
+
+  return (
+    <View style={styles.card} testID={`mybet-row-${item.bet_id}`}>
+      <View style={styles.rowTop}>
+        <Text style={styles.category}>{CATEGORY_LABEL[item.category] ?? item.category}</Text>
+        <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+          <Text style={[styles.badgeText, { color: badge.color }]}>{badge.label}</Text>
+        </View>
+      </View>
+      <Text style={styles.question} numberOfLines={2}>{item.question}</Text>
+      <View style={styles.rowBottom}>
+        <View style={styles.metaBlock}>
+          <Text style={styles.metaLabel}>Twój wybór</Text>
+          <Text style={styles.metaValue}>{item.choice === "a" ? "Opcja A" : "Opcja B"}</Text>
+        </View>
+        <View style={styles.metaBlock}>
+          <Text style={styles.metaLabel}>Stawka</Text>
+          <Text style={styles.metaValue}>{item.stake} 🪙</Text>
+        </View>
+        <View style={styles.metaBlock}>
+          <Text style={styles.metaLabel}>{item.resolved ? "Wypłata" : "Zamknięcie"}</Text>
+          <Text style={styles.metaValue}>
+            {item.resolved
+              ? item.payout > 0 ? `${item.payout} 🪙` : "—"
+              : new Date(item.closes_at).toLocaleString("pl-PL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+          </Text>
+        </View>
+      </View>
+      {item.resolved && (
+        <View style={styles.resultRow}>
+          <Ionicons
+            name={won ? "checkmark-circle" : "close-circle"}
+            size={18}
+            color={won ? colors.win : colors.loss}
+          />
+          <Text style={[styles.resultText, { color: won ? "#2E856E" : "#8E3A3A" }]}>
+            {won ? "Wygrałeś!" : "Niestety, przegrana"}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bg },
+  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 6 },
+  title: { fontSize: 24, fontWeight: "900", color: colors.text },
+  tabsRow: {
+    marginHorizontal: spacing.lg,
+    flexDirection: "row",
+    backgroundColor: colors.bgAlt,
+    borderRadius: 999,
+    padding: 4,
+    marginBottom: spacing.md,
+  },
+  tab: { flex: 1, paddingVertical: 10, borderRadius: 999, alignItems: "center" },
+  tabActive: { backgroundColor: colors.card, ...shadow.softer },
+  tabText: { fontWeight: "700", color: colors.textMuted, fontSize: 13 },
+  tabTextActive: { color: colors.text },
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: radii.card,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    ...shadow.softer,
+  },
+  rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  category: { fontSize: 12, fontWeight: "800", color: colors.textMuted, textTransform: "uppercase", letterSpacing: 0.5 },
+  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  badgeText: { fontSize: 12, fontWeight: "800" },
+  question: { marginTop: 8, fontSize: 16, fontWeight: "800", color: colors.text },
+  rowBottom: { flexDirection: "row", marginTop: 12, gap: 12 },
+  metaBlock: { flex: 1 },
+  metaLabel: { fontSize: 11, color: colors.textMuted, fontWeight: "700" },
+  metaValue: { fontSize: 13, color: colors.text, fontWeight: "800", marginTop: 2 },
+  resultRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 },
+  resultText: { fontSize: 13, fontWeight: "800" },
+  empty: { padding: spacing.xl, alignItems: "center" },
+  emptyTitle: { fontSize: 16, fontWeight: "900", color: colors.text, marginBottom: 6 },
+  emptyText: { fontSize: 13, color: colors.textMuted, textAlign: "center" },
+});

@@ -1,0 +1,54 @@
+{
+  "summary": "Full end-to-end test of PopBet (backend + frontend). Backend: 23/23 pytest tests passed covering auth (signup/login/me), bets listing+filter, place bet (success, duplicate 409, insufficient 400), my-bets, pari-mutuel resolve+payout, leaderboard global/friends, friend add (success/self/unknown), push register, MongoDB _id serialization. Frontend (mobile viewport 390x844) walked through onboarding → signup with reward animation → Markets with 1000-coin header pill → category chip filter (sport shows 1 card, all shows 7 in viewport) → tap option A → CTA switches to 'Obstaw' → place bet → card locks with '🔒 Obstawione', header coins drop 1000→950 → tab nav to Moje / Ranking (shows '(Ty)' next to current user) / Profil (avatar, big balance, share to Stories button). One console-flooding bug detected: 'Maximum update depth exceeded' after signup, caused by HiddenCoinPatch effect + non-idempotent patchCoins. Two Expo deprecation warnings observed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "HiddenCoinPatch / AuthContext.patchCoins",
+        "issue": "Infinite render loop causing console error 'Maximum update depth exceeded' repeatedly after signup. HiddenCoinPatch's useEffect deps are [trigger, patchCoins]; patchCoins always returns a new user object (even for delta=0), which changes `user`, causing AuthProvider's useMemo to produce a new patchCoins reference, which retriggers the effect. Fix: either wrap patchCoins in useCallback and short-circuit when delta===0, or drop patchCoins from HiddenCoinPatch deps (or just remove HiddenCoinPatch — signup already sets user with 1000 coins from backend). Reference: /app/frontend/src/context/AuthContext.tsx:80-87 and /app/frontend/app/onboarding.tsx:312-317",
+        "testID": "signup-reward-animation",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "shadow* style props",
+        "issue": "Console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\"'. Migrate shadow.soft/shadow.softer in /app/frontend/src/theme (used in BetCard, onboarding, tabs) to the new boxShadow style (or Platform.select) for RN 0.76+. Reference: theme/colors.ts and all screens that spread `...shadow.soft`."
+      },
+      {
+        "component": "props.pointerEvents",
+        "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. In /app/frontend/app/onboarding.tsx:295 the reward overlay uses `pointerEvents=\"none\"` as a prop; move it into the style object."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_popbet_backend.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix infinite render loop: memoize patchCoins with useCallback and no-op when delta===0, OR remove HiddenCoinPatch since signup already sets user with correct coins.",
+    "Migrate `shadow*` style props to `boxShadow` (RN Web deprecation).",
+    "Move `pointerEvents=\"none\"` from prop to style in reward overlay View in onboarding.tsx line 295."
+  ],
+  "critical_code_review_comments": [
+    "server.py: `POST /api/bets/{id}/resolve` has no auth — acceptable for demo, but note in docs that this is exposed publicly.",
+    "server.py: `avatar = AVATAR_URLS[hash(user_id) % len(AVATAR_URLS)]` — Python hash() is randomized per process. Not a bug per se, but avatar assignment is non-deterministic across restarts; if referenced by seed anywhere it could differ.",
+    "AuthContext.tsx: `useMemo` deps only include [user, loading] but the object returns non-memoized `signup/login/logout/refresh/patchCoins`. These are stable within a render but re-created every render. Wrap with useCallback for cleaner behavior."
+  ],
+  "updated_files": [
+    "/app/backend/tests/conftest.py (new)",
+    "/app/backend/tests/test_popbet_backend.py (new)"
+  ],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "100% of tested flows (onboarding→signup→markets→filter→place bet→lock→coin decrement→3-tab nav) passed; 1 non-blocking console error observed"},
+  "seed_data_creation": "Created TEST_ prefixed users during test run (TESTa*, TESTb*, TESTc*, TESTsu*) via /api/auth/signup. One music seed bet was resolved during pari-mutuel test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend tests are idempotent (unique users per session). /api/bets excludes resolved bets — the seeded set of 10 shrinks as bets are resolved by resolve tests. Adjust asserts if you re-add resolve tests. The frontend Markets header uses testID='header-coin-balance', category chips use testID='chip-<key>' (all/sport/awards/reality_tv/gossip/music), bet cards use testID='bet-card-<bet_id>', option buttons 'bet-option-{a|b}-<bet_id>', place button 'bet-place-button-<bet_id>', lock box 'bet-locked-<bet_id>'.",
+  "rca_of_issue": "Maximum update depth: In /app/frontend/app/onboarding.tsx HiddenCoinPatch runs `useEffect(() => { if (trigger) patchCoins(0); }, [trigger, patchCoins])`. patchCoins in AuthContext.tsx does `setUser(u => ({...u, coins: u.coins + 0}))` which ALWAYS produces a new user object. Because AuthProvider's `useMemo(value, [user, loading])` depends on `user`, a new `value` (and therefore a new `patchCoins` function) is produced on every render. The changed `patchCoins` reference retriggers HiddenCoinPatch's effect → infinite loop. Mitigation options: (a) short-circuit `if (delta === 0) return;` inside patchCoins, (b) memoize patchCoins with useCallback([], []) and use a functional setter, or (c) delete HiddenCoinPatch entirely (its comment says it's a no-op and signup already fetches coins from backend)."
+}

@@ -1,0 +1,121 @@
+{
+  "theme": "Light theme only. Background: Creamy white (#FAFAF7). No dark mode required.",
+  "typography": {
+    "fonts": {
+      "heading": "Nunito, sans-serif",
+      "body": "Nunito, sans-serif"
+    },
+    "scale": {
+      "h1": "text-3xl md:text-4xl font-black tracking-tight text-slate-800",
+      "h2": "text-xl md:text-2xl font-bold text-slate-800",
+      "balance": "text-5xl md:text-6xl font-black text-[#FF8A65]"
+    },
+    "rules": [
+      "Use bold, friendly typography but do not make it aggressive.",
+      "Never use Inter or standard safe fonts. Strictly use Nunito or Quicksand to give it a Kahoot-like friendly vibe.",
+      "Round and friendly look."
+    ]
+  },
+  "colors": {
+    "background": "#FAFAF7",
+    "primary": "#FF8A65",
+    "win": "#7FD8BE",
+    "loss": "#F4A6A6",
+    "categories": {
+      "sport": "#E3F2FD",
+      "awards": "#FFF9C4",
+      "reality_tv": "#FCE4EC",
+      "gossip": "#F3E5F5",
+      "music": "#E8F5E9"
+    },
+    "text": {
+      "main": "#2D3748",
+      "muted": "#718096"
+    },
+    "rules": [
+      "No harsh black or pure white. Use #FAFAF7 for app backgrounds.",
+      "Use pastel accents for category icons and pills.",
+      "Avoid any casino, betting, or financial dark colors. Keep it BeReal/Kahoot vibe."
+    ]
+  },
+  "visual_enhancers": {
+    "shadows": [
+      "Extremely delicate, soft shadows. e.g., shadow-[0_8px_30px_rgb(0,0,0,0.04)]",
+      "No harsh drop shadows or neon glows."
+    ],
+    "corners": "Rounded heavily. Use rounded-[24px] or rounded-3xl for cards. Buttons should be pill-shaped.",
+    "borders": "No harsh borders, rely on subtle shadows or very light border-gray-100 to let the app 'breathe'."
+  },
+  "components": {
+    "BetCard": "Thick rounded-3xl white card with delicate shadow. Contains question, 2 large pill-shaped option buttons, a soft bouncy animated percentage bar, and a live countdown timer pill. Once voted, it locks visually.",
+    "CategoryTabs": "Horizontal scroller. Pill shaped tabs with pastel background based on category. Hide native scrollbars.",
+    "StakeSlider": "Thick, friendly slider track with a large draggable thumb. The track fills with the primary peach color.",
+    "BottomNav": "Sticky bottom nav for Mobile-First layout. Active state indicated by primary color and subtle bounce. Use Lucide icons.",
+    "CoinDisplay": "Large friendly text for balance. On onboarding, animate +1000."
+  },
+  "grids_layouts": {
+    "mobile_first": "App is mobile-first. Limit max-width to max-w-md mx-auto if viewed on desktop to simulate mobile app frame. Use relative positioning, hide overflow-x.",
+    "spacing": "Generous spacing. p-6 or p-8 inside cards. App should feel 'breathable'."
+  },
+  "motion": {
+    "micro_interactions": [
+      "Bouncy springs using framer-motion (type: 'spring', stiffness: 400, damping: 10).",
+      "Pulsating live timer on active bets.",
+      "Smooth percentage bar filling when a bet resolves or is placed."
+    ],
+    "rewards": "Use canvas-confetti package for bet confirmation and coin reward on onboarding (+1000)."
+  },
+  "accessibility": {
+    "contrast": "Ensure text over pastel background meets contrast rules. Use dark gray (#2D3748) text.",
+    "testing": "All interactive and key informational elements MUST include a data-testid attribute (e.g., data-testid='bet-option-1')."
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://images.unsplash.com/photo-1517230878791-4d28214057c2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHwxfHxwb3AlMjBzdGFyJTIwc2luZ2luZyUyMGNvbmNlcnR8ZW58MHx8fHwxNzg0NDE0NzU4fDA&ixlib=rb-4.1.0&q=85",
+        "category": "Event Card - Music",
+        "description": "Woman singing in red dress - use as background or thumbnail for music bets."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1629217855633-79a6925d6c47?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MDZ8MHwxfHNlYXJjaHwxfHxzb2NjZXIlMjBzdGFkaXVtJTIwY3Jvd2R8ZW58MHx8fHwxNzg0NDE0NzU3fDA&ixlib=rb-4.1.0&q=85",
+        "category": "Event Card - Sport",
+        "description": "People watching soccer in stadium. Use for sports category."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1772371272228-f4a8247cfe6d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHw0fHxoYXBweSUyMHRlZW5hZ2VyJTIwYXZhdGFyJTIwcG9ydHJhaXR8ZW58MHx8fHwxNzg0NDE0NzU4fDA&ixlib=rb-4.1.0&q=85",
+        "category": "Avatar",
+        "description": "Cartoon boy in purple hoodie. Default avatar."
+      },
+      {
+        "url": "https://images.pexels.com/photos/30518441/pexels-photo-30518441.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "Avatar Alternate",
+        "description": "Real photo of a cheerful teenager."
+      }
+    ]
+  },
+  "libraries": {
+    "motion": "framer-motion",
+    "icons": "lucide-react",
+    "confetti": "canvas-confetti",
+    "components": "shadcn/ui (customized to remove harsh borders and increase border-radius)"
+  },
+  "instructions_to_main_agent": [
+    "Build a mobile-first UI wrapper (max-w-md mx-auto min-h-screen relative bg-[#FAFAF7]).",
+    "Do NOT build a 'Create Bet' screen. Bets are centrally generated by the system and everyone sees the same ones.",
+    "Implement the 5 required screens: Onboarding (3 slides + signup), Home (Markets), My Bets (Active/Resolved), Leaderboard (Global/Friends), Profile.",
+    "Include a sticky bottom navigation bar connecting these screens.",
+    "Bet Cards must show the question, two large options, a live countdown, and a slider. After voting, trigger confetti, lock the card, and show percentages.",
+    "Add +1000 coin animation during onboarding.",
+    "Ensure 'My Bets' uses Mint Green (#7FD8BE) for wins and Soft Pink (#F4A6A6) for losses."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Do not use generic centered layouts or uniform styling. Make it look like a premium Gen-Z mobile app.",
+    "Every interaction needs micro-animations - hover states, bouncy spring transitions.",
+    "Use 2-3x more spacing. Cramped designs look cheap. High border radius (rounded-3xl).",
+    "DO NOT apply universal transition (transition: all). Use specific transitions.",
+    "DO NOT center align the app container text.",
+    "Use modern pill-shaped buttons with interaction animations.",
+    "NEVER use placeholder text for images. Use the provided image URLs.",
+    "Always include data-testid on interactive elements for automated testing."
+  ]
+}
