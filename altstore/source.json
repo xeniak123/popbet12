@@ -1,0 +1,41 @@
+{
+  "name": "PopBet Store",
+  "subtitle": "Obstawiaj popkulturę za wirtualne monety",
+  "description": "Oficjalne źródło aplikacji PopBet — zakłady o sport, muzykę, nagrody i plotki, za wirtualne monety, bez prawdziwych pieniędzy.",
+  "iconURL": "https://raw.githubusercontent.com/xeniak123/popbet12/main/frontend/assets/images/icon.png",
+  "website": "https://github.com/xeniak123/popbet12",
+  "tintColor": "#5B9BD5",
+  "apps": [
+    {
+      "name": "PopBet",
+      "bundleIdentifier": "com.xeniak.popbet",
+      "developerName": "xeniak123",
+      "subtitle": "Typuj, wygrywaj monety, rywalizuj ze znajomymi",
+      "iconURL": "https://raw.githubusercontent.com/xeniak123/popbet12/main/frontend/assets/images/icon.png",
+      "localizedDescription": "PopBet to rozrywkowa apka do obstawiania wydarzeń popkulturowych: sport, muzyka, nagrody, reality TV i plotki. Grasz wyłącznie za wirtualne monety.",
+      "category": "entertainment",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "buildVersion": "1",
+          "date": "2026-07-19",
+          "downloadURL": "https://github.com/xeniak123/popbet12/releases/download/v1.0.0/PopBet.ipa",
+          "size": 13709967,
+          "minOSVersion": "15.1"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSCameraUsageDescription": "Allow PopBet to access your camera",
+          "NSContactsUsageDescription": "Znajdź znajomych, z którymi chcesz rywalizować.",
+          "NSFaceIDUsageDescription": "Allow PopBet to access your Face ID biometric data.",
+          "NSMicrophoneUsageDescription": "Allow PopBet to access your microphone",
+          "NSPhotoLibraryAddUsageDescription": "Zapisuj grafiki z wynikami.",
+          "NSPhotoLibraryUsageDescription": "Zapisuj i udostępniaj grafiki z wynikami."
+        }
+      }
+    }
+  ],
+  "news": []
+}
