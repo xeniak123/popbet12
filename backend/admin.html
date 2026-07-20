@@ -95,6 +95,13 @@ function copyPrompt() {
   const today = new Date().toLocaleDateString("pl-PL", { year:"numeric", month:"long", day:"numeric" });
   const prompt = `Dzisiaj jest ${today}. Wygeneruj 5 zakładów typu "co się wydarzy" do polskiej aplikacji rozrywkowej PopBet (zakłady za wirtualne monety, bez prawdziwych pieniędzy). Zakłady mają dotyczyć aktualnych, prawdziwych wydarzeń: sport, muzyka, nagrody, reality TV, plotki o gwiazdach. Każdy zakład ma DOKŁADNIE dwie opcje i musi rozstrzygać się w ciągu najbliższych dni.
 
+NAJWAŻNIEJSZA ZASADA — weryfikowalność: każdy zakład musi dać się później obiektywnie rozstrzygnąć jednym wyszukiwaniem w internecie. Dlatego:
+- podawaj KONKRETNE wydarzenie z KONKRETNĄ datą (np. "Kto wygra mecz Lech Poznań – Legia Warszawa 21.07?", nie "Kto wygra w ten weekend?"),
+- w "subtitle" wpisz nazwę rozgrywek/wydarzenia i datę,
+- zakaz sformułowań typu "w tym tygodniu", "wkrótce", "najbliższy mecz" — zawsze nazwa + data,
+- wynik musi być publicznie ogłaszany (wynik meczu, oficjalna premiera, ogłoszenie nagrody) — nie opinia,
+- "closes_in_hours" ustaw tak, by zakład zamykał się PRZED rozpoczęciem wydarzenia.
+
 Odpowiedz WYŁĄCZNIE poprawnym JSON-em w tym formacie (bez żadnego tekstu przed ani po):
 
 [
