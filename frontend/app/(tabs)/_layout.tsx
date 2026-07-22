@@ -44,6 +44,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="quick"
+        options={{
+          title: "Szybki",
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name={focused ? "flash" : "flash-outline"} color={color} testID="tab-icon-quick" />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="my-bets"
         options={{
           title: "Moje",

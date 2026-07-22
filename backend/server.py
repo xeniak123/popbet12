@@ -4,7 +4,9 @@ from __future__ import annotations
 import hmac
 import logging
 import os
+import random
 import uuid
+from zoneinfo import ZoneInfo
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -36,6 +38,20 @@ ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
 # nawet gdy pula przegranych jest mala lub zerowa (malo userow / wszyscy na jedna opcje).
 # Normalny podzial pari-mutuel dziala dalej i moze dac wiecej.
 HOUSE_MIN_PROFIT_RATIO = float(os.environ.get("HOUSE_MIN_PROFIT_RATIO", "0.5"))
+
+# --- Szybkie zakłady (gra w kartę) ---
+QUICK_MAX_PER_DAY = int(os.environ.get("QUICK_MAX_PER_DAY", "3"))
+QUICK_MIN_STAKE = int(os.environ.get("QUICK_MIN_STAKE", "10"))
+# Mnożniki wypłaty przy trafieniu (całkowity zwrot: stawka * mnożnik).
+# Kolor = 1/2 szansy, znak = 1/4, numer = 1/13 — im mniejsza szansa, tym wyższy mnożnik.
+QUICK_COLOR_MULT = float(os.environ.get("QUICK_COLOR_MULT", "1.5"))
+QUICK_SUIT_MULT = float(os.environ.get("QUICK_SUIT_MULT", "3.0"))
+QUICK_RANK_MULT = float(os.environ.get("QUICK_RANK_MULT", "10.0"))
+
+WARSAW_TZ = ZoneInfo("Europe/Warsaw")
+SUIT_COLOR = {"hearts": "red", "diamonds": "red", "clubs": "black", "spades": "black"}
+SUIT_SYMBOL = {"hearts": "♥", "diamonds": "♦", "clubs": "♣", "spades": "♠"}
+CARD_RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
 PUSH_BASE_URL = "https://integrations.emergentagent.com"
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -204,6 +220,15 @@ class AdminResolveBatchIn(BaseModel):
     results: List[AdminResolveItem]
 
 
+class QuickPlayIn(BaseModel):
+    color: str  # "red" | "black"
+    color_stake: int = Field(ge=1)
+    suit: Optional[str] = None            # hearts | diamonds | clubs | spades
+    suit_stake: Optional[int] = None
+    rank: Optional[str] = None            # A, 2..10, J, Q, K
+    rank_stake: Optional[int] = None
+
+
 # ---------- helpers ----------
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -218,6 +243,17 @@ def require_admin(x_admin_key: Optional[str] = Header(default=None, alias="X-Adm
 
 def make_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:12]}"
+
+
+def warsaw_today() -> str:
+    return datetime.now(WARSAW_TZ).strftime("%Y-%m-%d")
+
+
+def quick_plays_used(user: dict) -> int:
+    qs = user.get("quick_state") or {}
+    if qs.get("date") == warsaw_today():
+        return int(qs.get("count", 0))
+    return 0
 
 
 def make_token(user_id: str) -> str:
@@ -1356,3 +1392,85 @@ async def admin_page():
     if not path.exists():
         raise HTTPException(status_code=404, detail="admin.html nie znaleziony")
     return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
+# --- szybkie zakłady (gra w kartę) ---
+@app.get("/api/quick/status")
+async def quick_status(user: dict = Depends(get_current_user)):
+    used = quick_plays_used(user)
+    return {
+        "plays_left": max(0, QUICK_MAX_PER_DAY - used),
+        "max_per_day": QUICK_MAX_PER_DAY,
+        "min_stake": QUICK_MIN_STAKE,
+        "coins": user["coins"],
+        "multipliers": {"color": QUICK_COLOR_MULT, "suit": QUICK_SUIT_MULT, "rank": QUICK_RANK_MULT},
+    }
+
+
+@app.post("/api/quick/play")
+async def quick_play(payload: QuickPlayIn, user: dict = Depends(get_current_user)):
+    used = quick_plays_used(user)
+    if used >= QUICK_MAX_PER_DAY:
+        raise HTTPException(status_code=400, detail=f"Wykorzystałeś już {QUICK_MAX_PER_DAY} szybkie zakłady na dziś. Wróć jutro!")
+
+    if payload.color not in ("red", "black"):
+        raise HTTPException(status_code=400, detail="Nieprawidłowy kolor")
+    if payload.color_stake < QUICK_MIN_STAKE:
+        raise HTTPException(status_code=400, detail=f"Minimalna stawka to {QUICK_MIN_STAKE}")
+
+    # hierarchia: numer wymaga znaku, znak wymaga koloru (kolor jest zawsze)
+    legs = [("color", payload.color, payload.color_stake, QUICK_COLOR_MULT)]
+
+    if payload.suit is not None:
+        if payload.suit not in SUIT_COLOR:
+            raise HTTPException(status_code=400, detail="Nieprawidłowy znak karty")
+        if not payload.suit_stake or payload.suit_stake < QUICK_MIN_STAKE:
+            raise HTTPException(status_code=400, detail=f"Minimalna stawka na znak to {QUICK_MIN_STAKE}")
+        legs.append(("suit", payload.suit, payload.suit_stake, QUICK_SUIT_MULT))
+
+    if payload.rank is not None:
+        if payload.suit is None:
+            raise HTTPException(status_code=400, detail="Numer można obstawić tylko razem ze znakiem")
+        if payload.rank not in CARD_RANKS:
+            raise HTTPException(status_code=400, detail="Nieprawidłowy numer karty")
+        if not payload.rank_stake or payload.rank_stake < QUICK_MIN_STAKE:
+            raise HTTPException(status_code=400, detail=f"Minimalna stawka na numer to {QUICK_MIN_STAKE}")
+        legs.append(("rank", payload.rank, payload.rank_stake, QUICK_RANK_MULT))
+
+    total_stake = sum(l[2] for l in legs)
+    if total_stake > user["coins"]:
+        raise HTTPException(status_code=400, detail="Za mało monet na tę stawkę")
+
+    # rozdanie karty
+    suit = random.choice(list(SUIT_COLOR.keys()))
+    rank = random.choice(CARD_RANKS)
+    card = {"suit": suit, "color": SUIT_COLOR[suit], "rank": rank, "label": f"{rank}{SUIT_SYMBOL[suit]}"}
+
+    results = []
+    total_payout = 0
+    for kind, guess, stake, mult in legs:
+        if kind == "color":
+            win = guess == card["color"]
+        elif kind == "suit":
+            win = guess == card["suit"]
+        else:
+            win = guess == card["rank"]
+        payout = int(round(stake * mult)) if win else 0
+        total_payout += payout
+        results.append({"type": kind, "guess": guess, "stake": stake, "win": win, "payout": payout})
+
+    net = total_payout - total_stake
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$inc": {"coins": net}, "$set": {"quick_state": {"date": warsaw_today(), "count": used + 1}}},
+    )
+
+    return {
+        "card": card,
+        "legs": results,
+        "total_stake": total_stake,
+        "total_payout": total_payout,
+        "net": net,
+        "coins": user["coins"] + net,
+        "plays_left": max(0, QUICK_MAX_PER_DAY - (used + 1)),
+    }
