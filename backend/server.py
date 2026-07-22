@@ -32,6 +32,10 @@ EMERGENT_PUSH_KEY = os.environ.get("EMERGENT_PUSH_KEY", "placeholder")
 # Klucz do panelu /admin i endpointów administracyjnych. Gdy pusty, admin jest wyłączony
 # (a resolve działa bez klucza — tryb deweloperski/testowy).
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
+# Gwarancja od "banku": wygrany zawsze dostaje minimum stawka * (1 + ten wskaznik),
+# nawet gdy pula przegranych jest mala lub zerowa (malo userow / wszyscy na jedna opcje).
+# Normalny podzial pari-mutuel dziala dalej i moze dac wiecej.
+HOUSE_MIN_PROFIT_RATIO = float(os.environ.get("HOUSE_MIN_PROFIT_RATIO", "0.5"))
 PUSH_BASE_URL = "https://integrations.emergentagent.com"
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -748,10 +752,13 @@ async def _do_resolve(bet: dict, win_key: str) -> dict:
     to_notify: List[str] = []
     for p in placements:
         won = p["option"] == win_key
-        # pari-mutuel: winner gets their stake back + proportional share of losers' pool
+        # pari-mutuel: zwrot stawki + proporcjonalny udzial w puli przegranych,
+        # ale nie mniej niz gwarancja od banku (stake * (1 + HOUSE_MIN_PROFIT_RATIO)).
         if won and winners_pool > 0:
             share = (p["stake"] / winners_pool) * losers_pool
-            payout = int(round(p["stake"] + share))
+            parimutuel = p["stake"] + share
+            guaranteed = p["stake"] * (1 + HOUSE_MIN_PROFIT_RATIO)
+            payout = int(round(max(parimutuel, guaranteed)))
         else:
             payout = 0
         await db.placements.update_one(

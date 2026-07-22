@@ -93,7 +93,11 @@ const CATS = { sport:"⚽ Sport", awards:"🏆 Nagrody", reality_tv:"📺 Realit
 
 function copyPrompt() {
   const today = new Date().toLocaleDateString("pl-PL", { year:"numeric", month:"long", day:"numeric" });
-  const prompt = `Dzisiaj jest ${today}. Wygeneruj 5 zakładów typu "co się wydarzy" do polskiej aplikacji rozrywkowej PopBet (zakłady za wirtualne monety, bez prawdziwych pieniędzy). Zakłady mają dotyczyć aktualnych, prawdziwych wydarzeń: sport, muzyka, nagrody, reality TV, plotki o gwiazdach. Każdy zakład ma DOKŁADNIE dwie opcje i musi rozstrzygać się w ciągu najbliższych dni.
+  const active = cachedBets.filter(b => !b.resolved);
+  const existingBlock = active.length
+    ? `\n\nNIE POWTARZAJ tych zakładów — są już aktywne w aplikacji (wygeneruj INNE wydarzenia):\n${active.map(b => `- "${b.question}"${b.subtitle ? " (" + b.subtitle + ")" : ""}`).join("\n")}`
+    : "";
+  const prompt = `Dzisiaj jest ${today}. Wygeneruj 5 zakładów typu "co się wydarzy" do polskiej aplikacji rozrywkowej PopBet (zakłady za wirtualne monety, bez prawdziwych pieniędzy). Zakłady mają dotyczyć aktualnych, prawdziwych wydarzeń: sport, muzyka, nagrody, reality TV, plotki o gwiazdach. Każdy zakład ma DOKŁADNIE dwie opcje i musi rozstrzygać się w ciągu najbliższych dni.${existingBlock}
 
 NAJWAŻNIEJSZA ZASADA — weryfikowalność: każdy zakład musi dać się później obiektywnie rozstrzygnąć jednym wyszukiwaniem w internecie. Dlatego:
 - podawaj KONKRETNE wydarzenie z KONKRETNĄ datą (np. "Kto wygra mecz Lech Poznań – Legia Warszawa 21.07?", nie "Kto wygra w ten weekend?"),
