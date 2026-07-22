@@ -1423,18 +1423,20 @@ async def quick_play(payload: QuickPlayIn, user: dict = Depends(get_current_user
 
     if payload.suit is not None:
         if payload.suit not in SUIT_COLOR:
-            raise HTTPException(status_code=400, detail="Nieprawidłowy znak karty")
+            raise HTTPException(status_code=400, detail="Nieprawidłowy kolor karty")
+        if SUIT_COLOR[payload.suit] != payload.color:
+            raise HTTPException(status_code=400, detail="Kolor (kier/karo/trefl/pik) musi pasować do wybranej barwy")
         if not payload.suit_stake or payload.suit_stake < QUICK_MIN_STAKE:
-            raise HTTPException(status_code=400, detail=f"Minimalna stawka na znak to {QUICK_MIN_STAKE}")
+            raise HTTPException(status_code=400, detail=f"Minimalna stawka na kolor to {QUICK_MIN_STAKE}")
         legs.append(("suit", payload.suit, payload.suit_stake, QUICK_SUIT_MULT))
 
     if payload.rank is not None:
         if payload.suit is None:
-            raise HTTPException(status_code=400, detail="Numer można obstawić tylko razem ze znakiem")
+            raise HTTPException(status_code=400, detail="Wartość można obstawić tylko razem z kolorem")
         if payload.rank not in CARD_RANKS:
-            raise HTTPException(status_code=400, detail="Nieprawidłowy numer karty")
+            raise HTTPException(status_code=400, detail="Nieprawidłowa wartość karty")
         if not payload.rank_stake or payload.rank_stake < QUICK_MIN_STAKE:
-            raise HTTPException(status_code=400, detail=f"Minimalna stawka na numer to {QUICK_MIN_STAKE}")
+            raise HTTPException(status_code=400, detail=f"Minimalna stawka na wartość to {QUICK_MIN_STAKE}")
         legs.append(("rank", payload.rank, payload.rank_stake, QUICK_RANK_MULT))
 
     total_stake = sum(l[2] for l in legs)

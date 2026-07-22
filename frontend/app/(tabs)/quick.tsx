@@ -84,10 +84,22 @@ export default function QuickScreen() {
     flip.setValue(0);
   };
 
+  // Wybór barwy: kolor (kier/karo/trefl/pik) musi się mieścić w barwie,
+  // więc przy zmianie barwy czyścimy niepasujący kolor i wartość.
+  const pickColor = (c: "red" | "black") => {
+    if (c === colorGuess) return;
+    setColorGuess(c);
+    const suitColor = SUITS.find((s) => s.key === suitGuess)?.color;
+    if (suitGuess && suitColor !== c) {
+      setSuitGuess(null);
+      setRankGuess(null);
+    }
+  };
+
   const play = async () => {
-    if (!colorGuess) return toast.error("Wybierz kolor karty");
-    if (suitOn && !suitGuess) return toast.error("Wybierz znak karty");
-    if (rankOn && !rankGuess) return toast.error("Wybierz numer karty");
+    if (!colorGuess) return toast.error("Wybierz barwę (czerwona/czarna)");
+    if (suitOn && !suitGuess) return toast.error("Wybierz kolor (kier/karo/trefl/pik)");
+    if (rankOn && !rankGuess) return toast.error("Wybierz wartość karty");
     if (totalStake > coins) return toast.error("Za mało monet na tę stawkę");
 
     const body: Record<string, unknown> = { color: colorGuess, color_stake: colorStake };
@@ -170,21 +182,21 @@ export default function QuickScreen() {
           <ResultPanel result={result} onAgain={resetForNext} playsLeft={playsLeft} />
         ) : (
           <>
-            {/* KOLOR */}
-            <Section title="1 · Kolor" hint="×1.5">
+            {/* BARWA */}
+            <Section title="1 · Barwa" hint="×1.5">
               <View style={styles.row}>
                 <Choice
                   active={colorGuess === "red"}
-                  onPress={() => setColorGuess("red")}
-                  label="Czerwony"
+                  onPress={() => pickColor("red")}
+                  label="Czerwona"
                   bg="#FBE7E1"
                   border={RED}
                   emoji="🔴"
                 />
                 <Choice
                   active={colorGuess === "black"}
-                  onPress={() => setColorGuess("black")}
-                  label="Czarny"
+                  onPress={() => pickColor("black")}
+                  label="Czarna"
                   bg="#E7EAF0"
                   border={BLACK}
                   emoji="⚫"
@@ -193,17 +205,17 @@ export default function QuickScreen() {
               <StakeRow value={colorStake} onChange={setColorStake} max={coins} />
             </Section>
 
-            {/* ZNAK */}
+            {/* KOLOR (kier/karo/trefl/pik) */}
             <Section
-              title="2 · Znak"
+              title="2 · Kolor"
               hint="×3"
               toggle={{ on: suitOn, onToggle: () => setSuitOn((v) => !v), disabled: !colorGuess }}
-              locked={!colorGuess ? "Najpierw wybierz kolor" : undefined}
+              locked={!colorGuess ? "Najpierw wybierz barwę" : undefined}
             >
-              {suitOn && (
+              {suitOn && colorGuess && (
                 <>
                   <View style={styles.suitRow}>
-                    {SUITS.map((s) => (
+                    {SUITS.filter((s) => s.color === colorGuess).map((s) => (
                       <Pressable
                         key={s.key}
                         onPress={() => setSuitGuess(s.key)}
@@ -221,12 +233,12 @@ export default function QuickScreen() {
               )}
             </Section>
 
-            {/* NUMER */}
+            {/* WARTOŚĆ */}
             <Section
-              title="3 · Numer"
+              title="3 · Wartość"
               hint="×10"
               toggle={{ on: rankOn, onToggle: () => setRankOn((v) => !v), disabled: !suitOn || !suitGuess }}
-              locked={!suitOn || !suitGuess ? "Najpierw wybierz znak" : undefined}
+              locked={!suitOn || !suitGuess ? "Najpierw wybierz kolor" : undefined}
             >
               {rankOn && suitOn && (
                 <>
@@ -269,8 +281,8 @@ export default function QuickScreen() {
             </Pressable>
 
             <Text style={styles.disclaimer}>
-              Kolor: 1/2 szansy · Znak: 1/4 · Numer: 1/13. Numer można dodać tylko razem ze znakiem.
-              Każdą część rozliczamy osobno.
+              Barwa: 1/2 szansy · Kolor: 1/4 · Wartość: 1/13. Kolor musi pasować do barwy,
+              a wartość dodasz tylko razem z kolorem. Każdą część rozliczamy osobno.
             </Text>
           </>
         )}
@@ -297,10 +309,10 @@ function ResultPanel({ result, onAgain, playsLeft }: { result: PlayResult; onAga
             color={leg.win ? colors.win : colors.loss}
           />
           <Text style={styles.legLabel}>
-            {leg.type === "color" ? "Kolor" : leg.type === "suit" ? "Znak" : "Numer"}
+            {leg.type === "color" ? "Barwa" : leg.type === "suit" ? "Kolor" : "Wartość"}
             {"  "}
             <Text style={styles.legGuess}>
-              ({leg.type === "color" ? (leg.guess === "red" ? "czerwony" : "czarny")
+              ({leg.type === "color" ? (leg.guess === "red" ? "czerwona" : "czarna")
                 : leg.type === "suit" ? SUIT_SYMBOL[leg.guess]
                 : leg.guess})
             </Text>
