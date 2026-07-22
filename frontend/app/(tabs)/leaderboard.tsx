@@ -3,7 +3,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Contacts from "expo-contacts";
 import { useFocusEffect } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   Image,
@@ -12,6 +12,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -204,6 +205,22 @@ function AddFriendModal({ visible, onClose, onSent }: { visible: boolean; onClos
   const [msg, setMsg] = useState<string | null>(null);
   const [matches, setMatches] = useState<PhoneMatch[] | null>(null);
   const [contactsBusy, setContactsBusy] = useState(false);
+  const [ref, setRef] = useState<{ code: string; referrals: number; bonus: number; message: string } | null>(null);
+
+  useEffect(() => {
+    if (visible && !ref) {
+      api.get<{ code: string; referrals: number; bonus: number; message: string }>("/api/referral/me")
+        .then(setRef)
+        .catch(() => {});
+    }
+  }, [visible, ref]);
+
+  const shareInvite = async () => {
+    if (!ref) return;
+    try {
+      await Share.share({ message: ref.message });
+    } catch { /* anulowane */ }
+  };
 
   const importContacts = async () => {
     setMsg(null);
@@ -278,6 +295,24 @@ function AddFriendModal({ visible, onClose, onSent }: { visible: boolean; onClos
         <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.modalTitle}>Zaproś znajomego</Text>
           <Text style={styles.modalSub}>Wpisz nazwę użytkownika lub znajdź znajomych z Twoich kontaktów.</Text>
+
+          {ref && (
+            <View style={styles.refCard}>
+              <Text style={styles.refTitle}>📨 Zaproś do PopBet i zgarnij +{ref.bonus} 🪙</Text>
+              <Text style={styles.refDesc}>
+                Za każdego, kto zainstaluje apkę i wpisze Twój kod przy rejestracji.
+              </Text>
+              <View style={styles.refCodeRow}>
+                <Text style={styles.refCodeLabel}>Twój kod:</Text>
+                <Text style={styles.refCode}>{ref.code}</Text>
+                <Text style={styles.refCount}>· zaproszeni: {ref.referrals}</Text>
+              </View>
+              <TouchableOpacity testID="invite-share-button" onPress={shareInvite} style={styles.inviteBtn}>
+                <Ionicons name="share-social-outline" size={18} color="#FFF" />
+                <Text style={styles.inviteBtnText}>Zaproś z kontaktów</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <TouchableOpacity
             testID="contacts-import-button"
@@ -419,6 +454,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 12, borderRadius: 16, backgroundColor: colors.primarySoft,
   },
   contactsBtnText: { color: colors.primary, fontWeight: "800" },
+  refCard: {
+    marginTop: spacing.md, padding: 14, borderRadius: 18, backgroundColor: colors.winSoft,
+    borderWidth: 1, borderColor: colors.win,
+  },
+  refTitle: { fontSize: 15, fontWeight: "900", color: colors.text },
+  refDesc: { marginTop: 4, fontSize: 12.5, color: colors.textMuted, lineHeight: 17 },
+  refCodeRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  refCodeLabel: { fontSize: 13, color: colors.textMuted, fontWeight: "700" },
+  refCode: {
+    fontSize: 16, fontWeight: "900", color: colors.text, letterSpacing: 2,
+    backgroundColor: colors.card, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8,
+  },
+  refCount: { fontSize: 12.5, color: colors.textMuted, fontWeight: "700" },
+  inviteBtn: {
+    marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    paddingVertical: 12, borderRadius: 14, backgroundColor: colors.primary,
+  },
+  inviteBtnText: { color: "#FFF", fontWeight: "900", fontSize: 15 },
   matchRow: {
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingVertical: 8,

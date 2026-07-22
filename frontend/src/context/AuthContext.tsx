@@ -20,7 +20,7 @@ export type User = {
 type AuthState = {
   user: User | null;
   loading: boolean;
-  signup: (email: string, password: string, username: string, phone?: string) => Promise<void>;
+  signup: (email: string, password: string, username: string, phone?: string, referralCode?: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (sessionId: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -78,9 +78,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await storage.secureSet(TOKEN_KEY, token);
   };
 
-  const signup = async (email: string, password: string, username: string, phone?: string) => {
+  const signup = async (email: string, password: string, username: string, phone?: string, referralCode?: string) => {
     const res = await api.post<{ token: string; user: User }>("/api/auth/signup", {
       email, password, username, phone: phone || undefined,
+      referral_code: referralCode?.trim() || undefined,
     });
     await persistToken(res.token);
     setUser(res.user);

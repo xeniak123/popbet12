@@ -141,6 +141,7 @@ function AuthScreen({ onBack }: { onBack: () => void }) {
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [phone, setPhone] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reward, setReward] = useState(false);
@@ -177,7 +178,7 @@ function AuthScreen({ onBack }: { onBack: () => void }) {
     setBusy(true);
     try {
       if (mode === "signup") {
-        await signup(email.trim(), password, username.trim(), phone.trim() || undefined);
+        await signup(email.trim(), password, username.trim(), phone.trim() || undefined, referralCode.trim() || undefined);
         registerPush().catch(() => {});
         playReward();
       } else {
@@ -257,6 +258,19 @@ function AuthScreen({ onBack }: { onBack: () => void }) {
                   placeholderTextColor={colors.textMuted}
                   value={phone}
                   onChangeText={setPhone}
+                  style={styles.input}
+                />
+              </View>
+              <View style={styles.field}>
+                <Text style={styles.label}>Kod polecający (opcjonalnie)</Text>
+                <TextInput
+                  testID="auth-referral-input"
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  placeholder="np. AB4K9C"
+                  placeholderTextColor={colors.textMuted}
+                  value={referralCode}
+                  onChangeText={(t) => setReferralCode(t.toUpperCase())}
                   style={styles.input}
                 />
               </View>
