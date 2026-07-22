@@ -2,7 +2,7 @@
   "expo": {
     "name": "PopBet",
     "slug": "frontend",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "popbet",
@@ -10,6 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "buildNumber": "2",
       "bundleIdentifier": "com.xeniak.popbet",
       "infoPlist": {
         "NSContactsUsageDescription": "Znajdź znajomych, z którymi chcesz rywalizować.",
@@ -23,6 +24,7 @@
         "backgroundColor": "#FAFAF7"
       },
       "edgeToEdgeEnabled": true,
+      "versionCode": 2,
       "package": "com.xeniak.popbet",
       "permissions": [
         "READ_CONTACTS",
