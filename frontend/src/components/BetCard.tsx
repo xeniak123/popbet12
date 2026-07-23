@@ -84,7 +84,9 @@ export function BetCard({ bet, userCoins, onPlace }: Props) {
     });
   };
 
-  const maxStake = Math.min(userCoins, 500);
+  // Backend przyjmuje do 100 000 — suwak ograniczamy do 10 000, żeby dało się nim celować.
+  const maxStake = Math.min(userCoins, 10000);
+  const stakeStep = maxStake > 2000 ? 100 : 10;
   const canPlace = !locked && !!selected && stake >= 10 && userCoins >= stake && !submitting;
 
   const submit = async () => {
@@ -173,13 +175,32 @@ export function BetCard({ bet, userCoins, onPlace }: Props) {
             testID={`bet-stake-slider-${bet.bet_id}`}
             minimumValue={10}
             maximumValue={Math.max(20, maxStake)}
-            step={10}
+            step={stakeStep}
             value={stake}
             onValueChange={(v) => setStake(Math.round(v))}
             minimumTrackTintColor={colors.primary}
             maximumTrackTintColor={colors.primarySoft}
             thumbTintColor={colors.primary}
           />
+          <View style={styles.presetRow}>
+            {[100, 500, 1000, 5000].filter((v) => v <= maxStake).map((v) => (
+              <TouchableOpacity
+                key={v}
+                testID={`bet-stake-preset-${bet.bet_id}-${v}`}
+                onPress={() => setStake(v)}
+                style={[styles.preset, stake === v && styles.presetActive]}
+              >
+                <Text style={[styles.presetText, stake === v && styles.presetTextActive]}>{v}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              testID={`bet-stake-preset-${bet.bet_id}-max`}
+              onPress={() => setStake(maxStake)}
+              style={[styles.preset, stake === maxStake && styles.presetActive]}
+            >
+              <Text style={[styles.presetText, stake === maxStake && styles.presetTextActive]}>max</Text>
+            </TouchableOpacity>
+          </View>
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <TouchableOpacity
             testID={`bet-place-button-${bet.bet_id}`}
@@ -247,6 +268,14 @@ const styles = themedStyles(() => StyleSheet.create({
   stakeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   stakeLabel: { fontSize: 13, color: colors.textMuted, fontWeight: "600" },
   stakeValue: { fontSize: 15, color: colors.text, fontWeight: "800" },
+  presetRow: { flexDirection: "row", gap: 6, marginTop: 4 },
+  preset: {
+    flex: 1, paddingVertical: 7, borderRadius: radii.pill, backgroundColor: colors.bgAlt,
+    alignItems: "center", borderWidth: 1.5, borderColor: "transparent",
+  },
+  presetActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
+  presetText: { fontSize: 12, fontWeight: "800", color: colors.textMuted },
+  presetTextActive: { color: colors.primary },
   cta: {
     marginTop: 10,
     paddingVertical: 14,

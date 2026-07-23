@@ -14,6 +14,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api/client";
+import { storage } from "@/src/utils/storage";
 import { BetCard, type Bet } from "@/src/components/BetCard";
 import ConfettiOverlay from "@/src/components/Confetti";
 import { EmptyState } from "@/src/components/EmptyState";
@@ -21,9 +22,11 @@ import { BetCardSkeleton } from "@/src/components/Skeleton";
 import StreakCard from "@/src/components/StreakCard";
 import { useToast } from "@/src/components/Toast";
 import { useAuth } from "@/src/context/AuthContext";
-import { categoryList, colors, spacing, themedStyles } from "@/src/theme/colors";
+import { categoryList, colors, radii, spacing, themedStyles } from "@/src/theme/colors";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+const FIRST_BET_KEY = "popbet_first_bet_done";
+
 export default function MarketsScreen() {
   useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
 
@@ -35,6 +38,7 @@ export default function MarketsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [confetti, setConfetti] = useState(false);
+  const [firstBetDone, setFirstBetDone] = useState(true); // zakladamy TAK, zeby karta nie mrugala
 
   const load = useCallback(async (cat: string) => {
     const res = await api.get<Bet[]>(`/api/bets${cat && cat !== "all" ? `?category=${cat}` : ""}`);
@@ -55,10 +59,16 @@ export default function MarketsScreen() {
     }
   }, [category, load, refresh]);
 
+  useEffect(() => {
+    storage.getItem<boolean>(FIRST_BET_KEY, false).then((v) => setFirstBetDone(!!v));
+  }, []);
+
   const onPlace = useCallback(
     async (betId: string, option: string, stake: number) => {
       const updated = await api.post<Bet>(`/api/bets/${betId}/place`, { option, stake });
       setBets((prev) => prev.map((b) => (b.bet_id === betId ? updated : b)));
+      setFirstBetDone(true);
+      storage.setItem(FIRST_BET_KEY, true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       toast.success(`Postawiono ${stake} coinów! 🎉`);
       setConfetti(false);
@@ -96,7 +106,20 @@ export default function MarketsScreen() {
         <FlatList
           data={bets}
           keyExtractor={(b) => b.bet_id}
-          ListHeaderComponent={<StreakCard onClaimed={refresh} />}
+          ListHeaderComponent={
+            <>
+              {!firstBetDone && bets.length > 0 && (
+                <View style={styles.coach} testID="first-bet-coach">
+                  <Text style={styles.coachTitle}>👋 Zacznij tutaj</Text>
+                  <Text style={styles.coachText}>
+                    Wybierz jedną z dwóch odpowiedzi w zakładzie poniżej, ustaw stawkę
+                    i naciśnij „Postaw". Masz {user?.coins ?? 0} monet — nic nie tracisz na próbie.
+                  </Text>
+                </View>
+              )}
+              <StreakCard onClaimed={refresh} />
+            </>
+          }
           renderItem={({ item }) => (
             <BetCard bet={item} userCoins={user?.coins ?? 0} onPlace={onPlace} />
           )}
@@ -156,6 +179,13 @@ function ChipRow({ value, onChange }: { value: string; onChange: (v: string) => 
 }
 
 const styles = themedStyles(() => StyleSheet.create({
+  coach: {
+    backgroundColor: colors.primarySoft, borderRadius: radii.card, padding: spacing.md,
+    marginHorizontal: spacing.md, marginBottom: spacing.sm,
+    borderWidth: 2, borderColor: colors.primary,
+  },
+  coachTitle: { fontSize: 15, fontWeight: '900', color: colors.primary, marginBottom: 4 },
+  coachText: { fontSize: 13.5, color: colors.text, lineHeight: 19 },
   container: { flex: 1, backgroundColor: colors.bg },
   stickyHeader: {
     paddingBottom: 6,

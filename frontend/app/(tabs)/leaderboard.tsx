@@ -32,26 +32,37 @@ type Board = { rows: Row[]; me: Row };
 type PendingReq = { request_id: string; from_id: string; from_username: string; to_id: string; created_at: string };
 type Pending = { incoming: PendingReq[]; outgoing: PendingReq[] };
 type PhoneMatch = { user_id: string; username: string; avatar: string; phone?: string | null };
+type SeasonRow = { user_id: string; username: string; avatar: string; pnl: number; rank: number; league: string };
+type SeasonBoard = {
+  season: number;
+  days_left: number;
+  players: number;
+  rows: SeasonRow[];
+  me: SeasonRow & { played: boolean };
+  titles: { season: number; place: number; label: string }[];
+};
 
 export default function LeaderboardScreen() {
   useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
 
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const [tab, setTab] = useState<"global" | "friends">("global");
+  const [tab, setTab] = useState<"global" | "friends" | "season">("global");
+  const [season, setSeason] = useState<SeasonBoard | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
   const [pending, setPending] = useState<Pending>({ incoming: [], outgoing: [] });
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
 
-  const load = useCallback(async (which: "global" | "friends") => {
-    const [b, p] = await Promise.all([
-      api.get<Board>(`/api/leaderboard/${which}`),
-      api.get<Pending>("/api/friends/pending"),
-    ]);
-    setBoard(b);
+  const load = useCallback(async (which: "global" | "friends" | "season") => {
+    const p = await api.get<Pending>("/api/friends/pending");
     setPending(p);
+    if (which === "season") {
+      setSeason(await api.get<SeasonBoard>("/api/leaderboard/season"));
+    } else {
+      setBoard(await api.get<Board>(`/api/leaderboard/${which}`));
+    }
   }, []);
 
   useFocusEffect(useCallback(() => {
@@ -105,10 +116,82 @@ export default function LeaderboardScreen() {
             </View>
           )}
         </TouchableOpacity>
+        <TouchableOpacity
+          testID="leaderboard-tab-season"
+          onPress={() => setTab("season")}
+          style={[styles.tab, tab === "season" && styles.tabActive]}
+        >
+          <Text style={[styles.tabText, tab === "season" && styles.tabTextActive]}>🏅 Sezon</Text>
+        </TouchableOpacity>
       </View>
 
       {loading ? (
         <View style={styles.empty}><Text style={styles.emptyText}>Ładowanie…</Text></View>
+      ) : tab === "season" ? (
+        <FlatList
+          data={season?.rows ?? []}
+          keyExtractor={(r) => r.user_id}
+          contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 + insets.bottom }}
+          ListHeaderComponent={
+            <View style={styles.seasonHead} testID="season-header">
+              <View style={styles.seasonTop}>
+                <Text style={styles.seasonTitle}>Sezon {season?.season ?? 1}</Text>
+                <View style={styles.leaguePill}>
+                  <Text style={styles.leagueText}>{season?.me.league ?? "Brąz"}</Text>
+                </View>
+              </View>
+              <Text style={styles.seasonSub}>
+                Liczy się tylko zysk z tego sezonu — co {28} dni wszyscy startują od zera.
+                {season ? ` Zostało ${season.days_left} dni.` : ""}
+              </Text>
+              <View style={styles.seasonMine}>
+                <Text style={styles.seasonMineLabel}>Twój wynik sezonowy</Text>
+                <Text
+                  style={[
+                    styles.seasonMineValue,
+                    { color: (season?.me.pnl ?? 0) >= 0 ? colors.win : colors.loss },
+                  ]}
+                >
+                  {(season?.me.pnl ?? 0) >= 0 ? "+" : ""}{season?.me.pnl ?? 0} 🪙
+                </Text>
+              </View>
+              {season?.titles?.length ? (
+                <View style={styles.titlesWrap}>
+                  {season.titles.map((t) => (
+                    <View key={`${t.season}-${t.place}`} style={styles.titleChip}>
+                      <Text style={styles.titleChipText}>👑 {t.label}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          }
+          renderItem={({ item }) => (
+            <View
+              style={[styles.row, item.user_id === user?.user_id && styles.rowHighlight]}
+              testID={`season-row-${item.user_id}`}
+            >
+              <Text style={styles.rank}>{item.rank}</Text>
+              <Text style={styles.username} numberOfLines={1}>{item.username}</Text>
+              <View style={styles.leaguePillSmall}>
+                <Text style={styles.leagueTextSmall}>{item.league}</Text>
+              </View>
+              <Text style={[styles.coins, { color: item.pnl >= 0 ? colors.win : colors.loss }]}>
+                {item.pnl >= 0 ? "+" : ""}{item.pnl}
+              </Text>
+            </View>
+          )}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+          ListEmptyComponent={
+            <EmptyState
+              testID="season-empty"
+              emoji="🏅"
+              title="Sezon dopiero się rozkręca"
+              subtitle="Nikt jeszcze nie rozstrzygnął zakładu w tym sezonie. Postaw pierwszy i obejmij prowadzenie."
+            />
+          }
+          testID="season-list"
+        />
       ) : (
         <FlatList
           data={board?.rows ?? []}
@@ -208,11 +291,11 @@ function AddFriendModal({ visible, onClose, onSent }: { visible: boolean; onClos
   const [msg, setMsg] = useState<string | null>(null);
   const [matches, setMatches] = useState<PhoneMatch[] | null>(null);
   const [contactsBusy, setContactsBusy] = useState(false);
-  const [ref, setRef] = useState<{ code: string; referrals: number; bonus: number; message: string } | null>(null);
+  const [ref, setRef] = useState<{ code: string; referrals: number; bonus: number; message: string; milestone_every: number; milestone_bonus: number; to_next_milestone: number } | null>(null);
 
   useEffect(() => {
     if (visible && !ref) {
-      api.get<{ code: string; referrals: number; bonus: number; message: string }>("/api/referral/me")
+      api.get<{ code: string; referrals: number; bonus: number; message: string; milestone_every: number; milestone_bonus: number; to_next_milestone: number }>("/api/referral/me")
         .then(setRef)
         .catch(() => {});
     }
@@ -310,6 +393,26 @@ function AddFriendModal({ visible, onClose, onSent }: { visible: boolean; onClos
                 <Text style={styles.refCode}>{ref.code}</Text>
                 <Text style={styles.refCount}>· zaproszeni: {ref.referrals}</Text>
               </View>
+              {ref.milestone_every ? (
+                <View style={styles.progWrap} testID="referral-progress">
+                  <View style={styles.progTrack}>
+                    <View
+                      style={[
+                        styles.progFill,
+                        {
+                          width: `${Math.min(100, ((ref.milestone_every - ref.to_next_milestone) /
+                            ref.milestone_every) * 100)}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.progText}>
+                    {ref.to_next_milestone === 0
+                      ? `Próg osiągnięty — premia +${ref.milestone_bonus} 🪙 przyznana!`
+                      : `Jeszcze ${ref.to_next_milestone} do premii +${ref.milestone_bonus} 🪙 (co ${ref.milestone_every} zaproszeń)`}
+                  </Text>
+                </View>
+              ) : null}
               <TouchableOpacity testID="invite-share-button" onPress={shareInvite} style={styles.inviteBtn}>
                 <Ionicons name="share-social-outline" size={18} color="#FFF" />
                 <Text style={styles.inviteBtnText}>Zaproś z kontaktów</Text>
@@ -417,6 +520,36 @@ const styles = themedStyles(() => StyleSheet.create({
     alignItems: "center", justifyContent: "center", paddingHorizontal: 4,
   },
   notifDotText: { color: "#FFF", fontSize: 10, fontWeight: "900" },
+  seasonHead: {
+    backgroundColor: colors.card, borderRadius: radii.card, padding: spacing.md,
+    marginBottom: spacing.md, ...shadow.softer,
+  },
+  seasonTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  seasonTitle: { fontSize: 18, fontWeight: "900", color: colors.text },
+  seasonSub: { fontSize: 13, color: colors.textMuted, marginTop: 4, lineHeight: 18 },
+  leaguePill: {
+    backgroundColor: colors.primarySoft, borderRadius: radii.pill,
+    paddingHorizontal: 12, paddingVertical: 5,
+  },
+  leagueText: { fontSize: 12, fontWeight: "900", color: colors.primary },
+  leaguePillSmall: {
+    backgroundColor: colors.bgAlt, borderRadius: radii.pill,
+    paddingHorizontal: 8, paddingVertical: 3, marginRight: 8,
+  },
+  leagueTextSmall: { fontSize: 10, fontWeight: "800", color: colors.textMuted },
+  seasonMine: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    marginTop: spacing.sm, paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border,
+  },
+  seasonMineLabel: { fontSize: 13, fontWeight: "700", color: colors.textMuted },
+  seasonMineValue: { fontSize: 20, fontWeight: "900" },
+  titlesWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: spacing.sm },
+  titleChip: {
+    backgroundColor: colors.primarySoft, borderRadius: radii.pill,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  titleChipText: { fontSize: 11, fontWeight: "800", color: colors.primary },
   pendingCard: {
     backgroundColor: colors.primarySoft, borderRadius: radii.card,
     padding: spacing.md, marginBottom: spacing.md,
@@ -469,6 +602,10 @@ const styles = themedStyles(() => StyleSheet.create({
     fontSize: 16, fontWeight: "900", color: colors.text, letterSpacing: 2,
     backgroundColor: colors.card, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8,
   },
+  progWrap: { marginTop: 10 },
+  progTrack: { height: 6, borderRadius: 999, backgroundColor: colors.bgAlt, overflow: 'hidden' },
+  progFill: { height: '100%', borderRadius: 999, backgroundColor: colors.primary },
+  progText: { fontSize: 11, fontWeight: '700', color: colors.textMuted, marginTop: 6 },
   refCount: { fontSize: 12.5, color: colors.textMuted, fontWeight: "700" },
   inviteBtn: {
     marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,

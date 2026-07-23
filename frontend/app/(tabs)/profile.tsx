@@ -18,6 +18,8 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { captureRef } from "react-native-view-shot";
 
 import { api } from "@/src/api/client";
+import { BadgeShelf } from "@/src/components/BadgeShelf";
+import ConfettiOverlay from "@/src/components/Confetti";
 import { useAuth } from "@/src/context/AuthContext";
 import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
@@ -51,6 +53,7 @@ export default function ProfileScreen() {
   const [shareMsg, setShareMsg] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [template, setTemplate] = useState<Template>("stats");
+  const [confetti, setConfetti] = useState(false);
   const shareRef = useRef<View>(null);
 
   const load = useCallback(async () => {
@@ -185,6 +188,8 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        <BadgeShelf onCelebrate={() => { setConfetti(false); setTimeout(() => setConfetti(true), 30); }} />
+
         {/* Quick actions */}
         <View style={{ paddingHorizontal: spacing.md, gap: 10 }}>
           <TouchableOpacity
@@ -243,6 +248,8 @@ export default function ProfileScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <ConfettiOverlay visible={confetti} onDone={() => setConfetti(false)} />
     </SafeAreaView>
   );
 }

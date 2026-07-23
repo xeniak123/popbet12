@@ -1,10 +1,21 @@
 // My Bets - Active / Resolved tabs, win/loss chips.
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useState } from "react";
-import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  FlatList,
+  Modal,
+  Pressable,
+  RefreshControl,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api/client";
+import { storage } from "@/src/utils/storage";
 import { EmptyState } from "@/src/components/EmptyState";
 import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
@@ -31,11 +42,15 @@ const CATEGORY_LABEL: Record<string, string> = {
   music: "Muzyka",
 };
 
+const BIG_WIN_MIN = 500;              // od jakiego zysku proponujemy pochwalenie sie
+const LAST_SHARED_KEY = "popbet_last_shared_win";
+
 export default function MyBetsScreen() {
   useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
 
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<"active" | "resolved">("active");
+  const [bigWin, setBigWin] = useState<MyBet | null>(null);
   const [items, setItems] = useState<MyBet[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -43,6 +58,14 @@ export default function MyBetsScreen() {
   const load = useCallback(async (status: "active" | "resolved") => {
     const res = await api.get<MyBet[]>(`/api/my-bets?status=${status}`);
     setItems(res);
+    if (status === "resolved") {
+      // najswiezsza duza wygrana, ktorej jeszcze nie proponowalismy udostepnic
+      const win = res.find((b) => b.won && b.payout - b.stake >= BIG_WIN_MIN);
+      if (win) {
+        const seen = await storage.getItem<string>(LAST_SHARED_KEY, "");
+        if (seen !== win.bet_id) setBigWin(win);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -101,6 +124,47 @@ export default function MyBetsScreen() {
           testID="mybets-list"
         />
       )}
+
+      {/* Moment największych emocji — proponujemy pochwalenie się od razu */}
+      <Modal visible={!!bigWin} transparent animationType="fade" onRequestClose={() => setBigWin(null)}>
+        <Pressable style={styles.winBackdrop} onPress={() => setBigWin(null)}>
+          <Pressable style={styles.winCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.winEmoji}>🎉</Text>
+            <Text style={styles.winTitle}>
+              +{bigWin ? bigWin.payout - bigWin.stake : 0} monet!
+            </Text>
+            <Text style={styles.winQuestion} numberOfLines={3}>
+              {bigWin?.question}
+            </Text>
+            <TouchableOpacity
+              testID="bigwin-share"
+              style={styles.winShare}
+              onPress={async () => {
+                const w = bigWin;
+                setBigWin(null);
+                if (!w) return;
+                await storage.setItem(LAST_SHARED_KEY, w.bet_id);
+                Share.share({
+                  message:
+                    `Wytypowałem to na PopBet i zgarnąłem +${w.payout - w.stake} monet 🪙\n` +
+                    `„${w.question}"\n\nZagraj ze mną: https://github.com/xeniak123/popbet12/releases/latest`,
+                }).catch(() => {});
+              }}
+            >
+              <Text style={styles.winShareText}>Pochwal się wynikiem</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              testID="bigwin-later"
+              onPress={async () => {
+                if (bigWin) await storage.setItem(LAST_SHARED_KEY, bigWin.bet_id);
+                setBigWin(null);
+              }}
+            >
+              <Text style={styles.winLater}>Może później</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -159,6 +223,14 @@ function Row({ item }: { item: MyBet }) {
 }
 
 const styles = themedStyles(() => StyleSheet.create({
+  winBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  winCard: { backgroundColor: colors.card, borderRadius: radii.card, padding: spacing.lg, alignItems: 'center', width: '100%', maxWidth: 330 },
+  winEmoji: { fontSize: 46 },
+  winTitle: { fontSize: 26, fontWeight: '900', color: colors.win, marginTop: 4 },
+  winQuestion: { fontSize: 14, color: colors.textMuted, textAlign: 'center', marginTop: 8, lineHeight: 19 },
+  winShare: { backgroundColor: colors.primary, borderRadius: radii.button, paddingVertical: 13, paddingHorizontal: 28, marginTop: spacing.md },
+  winShareText: { color: '#FFF', fontWeight: '900', fontSize: 15 },
+  winLater: { color: colors.textMuted, fontWeight: '700', fontSize: 13, marginTop: 12 },
   container: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 6 },
   title: { fontSize: 24, fontWeight: "900", color: colors.text },

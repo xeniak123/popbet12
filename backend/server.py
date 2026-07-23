@@ -63,7 +63,7 @@ REF_ALPHABET = "".join(c for c in (string.ascii_uppercase + string.digits) if c 
 # Saldo sezonowe to osobny licznik zysku/straty z rozstrzygniętych zakładów.
 # Gracz gra normalnie swoimi monetami — sezon tylko zlicza wynik w oknie czasu.
 SEASON_DAYS = int(os.environ.get("SEASON_DAYS", "28"))
-SEASON_EPOCH = datetime(2026, 7, 27, tzinfo=timezone.utc)  # poniedziałek, start sezonu 1
+SEASON_EPOCH = datetime(2026, 7, 20, tzinfo=timezone.utc)  # poniedziałek, start sezonu 1
 
 # --- Polecenia: premia progowa ---
 REFERRAL_MILESTONE_EVERY = int(os.environ.get("REFERRAL_MILESTONE_EVERY", "5"))
