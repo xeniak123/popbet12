@@ -51,6 +51,9 @@ QUICK_RANK_MULT = float(os.environ.get("QUICK_RANK_MULT", "10.0"))
 
 # --- Polecenia (referral) ---
 REFERRAL_BONUS = int(os.environ.get("REFERRAL_BONUS", "300"))
+# Monety na start: normalnie, oraz gdy ktoś zarejestruje się z cudzym kodem polecającym.
+START_COINS = int(os.environ.get("START_COINS", "1000"))
+START_COINS_REFERRED = int(os.environ.get("START_COINS_REFERRED", "1500"))
 APP_INSTALL_URL = os.environ.get("APP_INSTALL_URL", "https://github.com/xeniak123/popbet12/releases/latest")
 # Znaki kodu — bez mylących (0/O, 1/I).
 REF_ALPHABET = "".join(c for c in (string.ascii_uppercase + string.digits) if c not in "O0I1")
@@ -537,6 +540,8 @@ async def signup(payload: SignupIn):
     ref = (payload.referral_code or "").strip().upper()
     if ref:
         referrer = await db.users.find_one({"referral_code": ref}, {"_id": 0, "user_id": 1})
+    # user_id jest świeżo wygenerowany, więc polecenie samego siebie jest niemożliwe
+    referrer_id = referrer["user_id"] if referrer and referrer["user_id"] != user_id else None
 
     doc = {
         "user_id": user_id,
@@ -545,7 +550,8 @@ async def signup(payload: SignupIn):
         "phone": (payload.phone or "").strip() or None,
         "phone_normalized": _normalize_phone(payload.phone or "") or None,
         "password_hash": pwd_ctx.hash(payload.password),
-        "coins": 1000,
+        # z ważnym kodem polecającym startujesz z większą pulą
+        "coins": START_COINS_REFERRED if referrer_id else START_COINS,
         "avatar": avatar,
         "created_at": now_utc(),
         "stats": {"total_bets": 0, "wins": 0, "losses": 0, "current_streak": 0, "best_streak": 0},
@@ -554,14 +560,14 @@ async def signup(payload: SignupIn):
         "referral_code": my_code,
         "referrals": 0,
     }
-    if referrer and referrer["user_id"] != user_id:
-        doc["referred_by"] = referrer["user_id"]
+    if referrer_id:
+        doc["referred_by"] = referrer_id
 
     await db.users.insert_one(doc)
     # nagroda dla polecającego dopiero po udanej rejestracji
-    if referrer and referrer["user_id"] != user_id:
+    if referrer_id:
         await db.users.update_one(
-            {"user_id": referrer["user_id"]},
+            {"user_id": referrer_id},
             {"$inc": {"coins": REFERRAL_BONUS, "referrals": 1}},
         )
     doc.pop("_id", None)
@@ -1444,12 +1450,15 @@ async def referral_me(user: dict = Depends(get_current_user)):
         "Gram w PopBet — typuj wydarzenia i zgarniaj monety, plus gra w kartę! 🎲🃏\n\n"
         f"1) Zainstaluj aplikację z tego linku:\n{APP_INSTALL_URL}\n\n"
         f"2) Przy rejestracji wpisz mój kod polecający: {code}\n\n"
-        "Dzięki temu pomagasz mi zdobyć bonus. Do zobaczenia w grze! 🙌"
+        f"Dzięki temu startujesz z {START_COINS_REFERRED} monetami zamiast {START_COINS}, "
+        f"a ja dostaję {REFERRAL_BONUS}. Do zobaczenia w grze! 🙌"
     )
     return {
         "code": code,
         "referrals": referrals,
         "bonus": REFERRAL_BONUS,
+        "start_coins": START_COINS,
+        "start_coins_referred": START_COINS_REFERRED,
         "install_url": APP_INSTALL_URL,
         "message": message,
     }
