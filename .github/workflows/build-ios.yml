@@ -120,3 +120,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "${{ github.event.inputs.tag }}" altstore/source.json --clobber
+
+      # KLUCZOWE: AltStore czyta source.json z galezi main (raw.githubusercontent),
+      # a nie z plikow Release. Bez tego kroku uzytkownicy widza stara wersje.
+      - name: Zapis source.json na galezi main (zrodlo AltStore)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add altstore/source.json
+          if git diff --cached --quiet; then
+            echo "source.json bez zmian — nic do wypchniecia"
+            exit 0
+          fi
+          git commit -m "AltStore source.json dla ${{ github.event.inputs.tag }}"
+          for i in 1 2 3; do
+            git fetch origin main
+            git rebase origin/main || git rebase --abort
+            if git push origin HEAD:main; then
+              echo "source.json zaktualizowany na main"
+              exit 0
+            fi
+            echo "push nieudany, ponawiam ($i/3)…"
+            sleep 5
+          done
+          echo "::error::Nie udalo sie zapisac source.json na main — AltStore bedzie pokazywac stara wersje"
+          exit 1

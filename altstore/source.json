@@ -16,11 +16,11 @@
       "category": "entertainment",
       "versions": [
         {
-          "version": "1.0.0",
-          "buildVersion": "1",
-          "date": "2026-07-19",
-          "downloadURL": "https://github.com/xeniak123/popbet12/releases/download/v1.0.0/PopBet.ipa",
-          "size": 13709967,
+          "version": "1.0.3",
+          "buildVersion": "4",
+          "date": "2026-07-22",
+          "downloadURL": "https://github.com/xeniak123/popbet12/releases/download/v1.1.0/PopBet.ipa",
+          "size": 12808096,
           "minOSVersion": "15.1"
         }
       ],
