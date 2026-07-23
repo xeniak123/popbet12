@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
 
@@ -57,6 +58,42 @@ START_COINS_REFERRED = int(os.environ.get("START_COINS_REFERRED", "1500"))
 APP_INSTALL_URL = os.environ.get("APP_INSTALL_URL", "https://github.com/xeniak123/popbet12/releases/latest")
 # Znaki kodu — bez mylących (0/O, 1/I).
 REF_ALPHABET = "".join(c for c in (string.ascii_uppercase + string.digits) if c not in "O0I1")
+
+# --- Sezony rankingowe ---
+# Saldo sezonowe to osobny licznik zysku/straty z rozstrzygniętych zakładów.
+# Gracz gra normalnie swoimi monetami — sezon tylko zlicza wynik w oknie czasu.
+SEASON_DAYS = int(os.environ.get("SEASON_DAYS", "28"))
+SEASON_EPOCH = datetime(2026, 7, 27, tzinfo=timezone.utc)  # poniedziałek, start sezonu 1
+
+# --- Polecenia: premia progowa ---
+REFERRAL_MILESTONE_EVERY = int(os.environ.get("REFERRAL_MILESTONE_EVERY", "5"))
+REFERRAL_MILESTONE_BONUS = int(os.environ.get("REFERRAL_MILESTONE_BONUS", "1000"))
+
+# --- Odznaki ---
+# Czysty status: NIE dają monet ani przewagi, żeby nie psuć balansu pari-mutuel.
+BADGE_DEFS = [
+    {"code": "streak", "name": "Dzienna passa", "emoji": "🔥", "stat": "streak_best",
+     "desc": "Dni z rzędu z odebranym bonusem",
+     "tiers": [("brąz", 7), ("srebro", 30), ("złoto", 100)]},
+    {"code": "hitstreak", "name": "Seria trafień", "emoji": "🎯", "stat": "hit_streak_best",
+     "desc": "Trafione zakłady z rzędu",
+     "tiers": [("brąz", 5), ("srebro", 10), ("złoto", 20)]},
+    {"code": "bigwin", "name": "Gruba wygrana", "emoji": "💰", "stat": "biggest_win",
+     "desc": "Zysk z jednego kuponu",
+     "tiers": [("brąz", 1000), ("srebro", 10000), ("złoto", 50000)]},
+    {"code": "referrals", "name": "Ambasador", "emoji": "🤝", "stat": "referrals",
+     "desc": "Osoby, które weszły z Twoim kodem",
+     "tiers": [("brąz", 1), ("srebro", 5), ("złoto", 25)]},
+    {"code": "generous", "name": "Hojny", "emoji": "💸", "stat": "transferred_out",
+     "desc": "Monety przelane znajomym",
+     "tiers": [("brąz", 1000), ("srebro", 10000), ("złoto", 100000)]},
+    {"code": "explorer", "name": "Odkrywca", "emoji": "🧭", "stat": "categories_count",
+     "desc": "Kategorie, w których obstawiałeś",
+     "tiers": [("brąz", 3), ("złoto", 5)]},
+    {"code": "cardsharp", "name": "Król kart", "emoji": "🃏", "stat": "quick_rank_hits",
+     "desc": "Trafione wartości karty (szansa 1/13)",
+     "tiers": [("brąz", 1), ("srebro", 3), ("złoto", 10)]},
+]
 
 WARSAW_TZ = ZoneInfo("Europe/Warsaw")
 SUIT_COLOR = {"hearts": "red", "diamonds": "red", "clubs": "black", "spades": "black"}
@@ -258,6 +295,102 @@ def make_id(prefix: str) -> str:
 
 def warsaw_today() -> str:
     return datetime.now(WARSAW_TZ).strftime("%Y-%m-%d")
+
+
+def season_number(now: Optional[datetime] = None) -> int:
+    now = now or now_utc()
+    return max(1, (now - SEASON_EPOCH).days // SEASON_DAYS + 1)
+
+
+def season_bounds(n: int) -> tuple[datetime, datetime]:
+    start = SEASON_EPOCH + timedelta(days=(n - 1) * SEASON_DAYS)
+    return start, start + timedelta(days=SEASON_DAYS)
+
+
+async def add_season_pnl(user_id: str, delta: int) -> None:
+    """Dopisuje bilans do salda sezonowego; przy nowym sezonie archiwizuje i zeruje."""
+    n = season_number()
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0, "season_n": 1, "season_pnl": 1})
+    if not u:
+        return
+    if u.get("season_n") != n:
+        update: dict = {"$set": {"season_n": n, "season_pnl": delta}}
+        if u.get("season_n"):
+            update["$push"] = {"season_history": {"n": u["season_n"], "pnl": u.get("season_pnl", 0)}}
+        await db.users.update_one({"user_id": user_id}, update)
+    else:
+        await db.users.update_one({"user_id": user_id}, {"$inc": {"season_pnl": delta}})
+
+
+def effective_season_pnl(user: dict) -> int:
+    """Wynik sezonowy liczy się tylko, gdy pochodzi z bieżącego sezonu."""
+    return int(user.get("season_pnl", 0)) if user.get("season_n") == season_number() else 0
+
+
+def league_for(rank: int, total: int) -> str:
+    """Liga z percentyla — każdy rywalizuje z podobnymi, bez machiny awansów/spadków."""
+    if total <= 0 or rank <= 0:
+        return "Brąz"
+    p = rank / total
+    if p <= 0.10:
+        return "Diament"
+    if p <= 0.35:
+        return "Złoto"
+    if p <= 0.70:
+        return "Srebro"
+    return "Brąz"
+
+
+def badge_values(user: dict) -> dict:
+    s = user.get("stats", {}) or {}
+    return {
+        "streak_best": int((user.get("streak", {}) or {}).get("best", 0)),
+        "hit_streak_best": int(s.get("best_hit_streak", 0)),
+        "biggest_win": int(s.get("biggest_win", 0)),
+        "referrals": int(user.get("referrals", 0)),
+        "transferred_out": int(s.get("transferred_out", 0)),
+        "categories_count": len(s.get("categories_played", []) or []),
+        "quick_rank_hits": int(s.get("quick_rank_hits", 0)),
+    }
+
+
+def earned_badge_ids(user: dict) -> List[str]:
+    vals = badge_values(user)
+    out: List[str] = []
+    for d in BADGE_DEFS:
+        v = vals.get(d["stat"], 0)
+        for tier_name, threshold in d["tiers"]:
+            if v >= threshold:
+                out.append(f"{d['code']}:{tier_name}")
+    return out
+
+
+async def finalize_past_seasons() -> None:
+    """Domyka poprzedni sezon i przyznaje tytuły top 3. Leniwie — bez crona."""
+    prev = season_number() - 1
+    if prev < 1:
+        return
+    done = await db.seasons.find_one({"n": prev}, {"_id": 0, "n": 1})
+    if done:
+        return
+    top = await db.users.find(
+        {"season_n": prev}, {"_id": 0, "user_id": 1, "username": 1, "season_pnl": 1}
+    ).sort("season_pnl", -1).limit(3).to_list(3)
+    await db.seasons.insert_one({
+        "n": prev,
+        "finalized_at": now_utc(),
+        "top": [{"user_id": u["user_id"], "username": u["username"], "pnl": u.get("season_pnl", 0)}
+                for u in top],
+    })
+    for place, u in enumerate(top, start=1):
+        if u.get("season_pnl", 0) <= 0:
+            continue  # tytuł tylko za wynik na plusie
+        await db.users.update_one(
+            {"user_id": u["user_id"]},
+            {"$addToSet": {"titles": {"season": prev, "place": place,
+                                      "label": f"Mistrz Sezonu {prev}" if place == 1
+                                      else f"Podium Sezonu {prev}"}}},
+        )
 
 
 def quick_plays_used(user: dict) -> int:
@@ -566,10 +699,18 @@ async def signup(payload: SignupIn):
     await db.users.insert_one(doc)
     # nagroda dla polecającego dopiero po udanej rejestracji
     if referrer_id:
-        await db.users.update_one(
+        after = await db.users.find_one_and_update(
             {"user_id": referrer_id},
             {"$inc": {"coins": REFERRAL_BONUS, "referrals": 1}},
+            projection={"_id": 0, "referrals": 1},
+            return_document=ReturnDocument.AFTER,
         )
+        # premia progowa: co N-te polecenie dodatkowy zastrzyk
+        count = (after or {}).get("referrals", 0)
+        if REFERRAL_MILESTONE_EVERY > 0 and count and count % REFERRAL_MILESTONE_EVERY == 0:
+            await db.users.update_one(
+                {"user_id": referrer_id}, {"$inc": {"coins": REFERRAL_MILESTONE_BONUS}}
+            )
     doc.pop("_id", None)
     token = make_token(user_id)
     return AuthOut(token=token, user=_user_out(doc))
@@ -766,7 +907,11 @@ async def place_bet(bet_id: str, payload: PlaceBetIn, user: dict = Depends(get_c
         raise HTTPException(status_code=409, detail="Już obstawiłeś ten zakład")
 
     # deduct coins, record placement, bump option totals
-    await db.users.update_one({"user_id": user["user_id"]}, {"$inc": {"coins": -payload.stake}})
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$inc": {"coins": -payload.stake},
+         "$addToSet": {"stats.categories_played": bet["category"]}},  # pod odznakę „Odkrywca”
+    )
     await db.placements.insert_one({
         "placement_id": make_id("plc"),
         "user_id": user["user_id"],
@@ -851,6 +996,22 @@ async def _do_resolve(bet: dict, win_key: str) -> dict:
         else:
             stat_inc["stats.losses"] = 1
         await db.users.update_one({"user_id": p["user_id"]}, {"$inc": stat_inc})
+
+        # seria trafień z rzędu (pod odznakę) — rośnie przy wygranej, zeruje przy przegranej
+        if won:
+            await db.users.update_one({"user_id": p["user_id"]}, {"$inc": {"stats.hit_streak": 1}})
+            fresh = await db.users.find_one({"user_id": p["user_id"]}, {"_id": 0, "stats": 1})
+            st = (fresh or {}).get("stats", {}) or {}
+            if st.get("hit_streak", 0) > st.get("best_hit_streak", 0):
+                await db.users.update_one(
+                    {"user_id": p["user_id"]},
+                    {"$set": {"stats.best_hit_streak": st["hit_streak"]}},
+                )
+        else:
+            await db.users.update_one({"user_id": p["user_id"]}, {"$set": {"stats.hit_streak": 0}})
+
+        # wynik sezonowy: zysk netto albo strata stawki
+        await add_season_pnl(p["user_id"], payout - p["stake"])
         if won and payout - p["stake"] > 0:
             profit = payout - p["stake"]
             await db.users.update_one(
@@ -1134,7 +1295,10 @@ async def transfer_coins(payload: TransferIn, user: dict = Depends(get_current_u
     if user["coins"] < payload.amount:
         raise HTTPException(status_code=400, detail="Za mało coinów")
 
-    await db.users.update_one({"user_id": user["user_id"]}, {"$inc": {"coins": -payload.amount}})
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$inc": {"coins": -payload.amount, "stats.transferred_out": payload.amount}},  # odznaka „Hojny”
+    )
     await db.users.update_one({"user_id": target["user_id"]}, {"$inc": {"coins": payload.amount}})
     tr_id = make_id("tr")
     await db.transfers.insert_one({
@@ -1453,6 +1617,8 @@ async def referral_me(user: dict = Depends(get_current_user)):
         f"Dzięki temu startujesz z {START_COINS_REFERRED} monetami zamiast {START_COINS}, "
         f"a ja dostaję {REFERRAL_BONUS}. Do zobaczenia w grze! 🙌"
     )
+    every = max(1, REFERRAL_MILESTONE_EVERY)
+    next_milestone = (referrals // every + 1) * every
     return {
         "code": code,
         "referrals": referrals,
@@ -1461,7 +1627,103 @@ async def referral_me(user: dict = Depends(get_current_user)):
         "start_coins_referred": START_COINS_REFERRED,
         "install_url": APP_INSTALL_URL,
         "message": message,
+        # postęp do premii progowej — żeby w apce pokazać pasek zamiast samej liczby
+        "milestone_every": every,
+        "milestone_bonus": REFERRAL_MILESTONE_BONUS,
+        "next_milestone": next_milestone,
+        "to_next_milestone": max(0, next_milestone - referrals),
     }
+
+
+# --- odznaki ---
+@app.get("/api/badges")
+async def badges(user: dict = Depends(get_current_user)):
+    vals = badge_values(user)
+    known = set(user.get("badges", []) or [])
+    earned = earned_badge_ids(user)
+    fresh = [b for b in earned if b not in known]
+    if fresh:
+        await db.users.update_one(
+            {"user_id": user["user_id"]}, {"$addToSet": {"badges": {"$each": fresh}}}
+        )
+
+    out = []
+    for d in BADGE_DEFS:
+        v = vals.get(d["stat"], 0)
+        tiers = [{"tier": t, "threshold": thr, "earned": v >= thr} for t, thr in d["tiers"]]
+        got = [t for t in tiers if t["earned"]]
+        nxt = next((t for t in tiers if not t["earned"]), None)
+        out.append({
+            "code": d["code"], "name": d["name"], "emoji": d["emoji"], "desc": d["desc"],
+            "value": v, "tiers": tiers,
+            "highest": got[-1]["tier"] if got else None,
+            "next": ({"tier": nxt["tier"], "threshold": nxt["threshold"],
+                      "remaining": max(0, nxt["threshold"] - v)} if nxt else None),
+        })
+
+    return {
+        "badges": out,
+        "earned_count": len(earned),
+        "total_count": sum(len(d["tiers"]) for d in BADGE_DEFS),
+        "new": fresh,  # do świętowania w aplikacji (konfetti + toast)
+        "titles": user.get("titles", []) or [],
+    }
+
+
+# --- ranking sezonowy ---
+@app.get("/api/leaderboard/season")
+async def leaderboard_season(user: dict = Depends(get_current_user)):
+    await finalize_past_seasons()
+    n = season_number()
+    start, end = season_bounds(n)
+
+    players = await db.users.find(
+        {"season_n": n}, {"_id": 0, "user_id": 1, "username": 1, "avatar": 1, "season_pnl": 1}
+    ).sort("season_pnl", -1).to_list(500)
+    total = len(players)
+
+    rows = [{
+        "user_id": p["user_id"], "username": p["username"], "avatar": p.get("avatar", ""),
+        "pnl": int(p.get("season_pnl", 0)), "rank": i + 1,
+        "league": league_for(i + 1, total),
+    } for i, p in enumerate(players[:100])]
+
+    my_pnl = effective_season_pnl(user)
+    my_rank = next((i + 1 for i, p in enumerate(players) if p["user_id"] == user["user_id"]), 0)
+    me = {
+        "user_id": user["user_id"], "username": user["username"], "avatar": user.get("avatar", ""),
+        "pnl": my_pnl,
+        "rank": my_rank or (total + 1),
+        "league": league_for(my_rank, total) if my_rank else "Brąz",
+        "played": my_rank > 0,
+    }
+
+    return {
+        "season": n,
+        "starts_at": start,
+        "ends_at": end,
+        "days_left": max(0, (end - now_utc()).days),
+        "players": total,
+        "rows": rows,
+        "me": me,
+        "history": user.get("season_history", [])[-6:],
+        "titles": user.get("titles", []) or [],
+    }
+
+
+# --- ranking polecających ---
+@app.get("/api/referral/leaderboard")
+async def referral_leaderboard(user: dict = Depends(get_current_user)):
+    top = await db.users.find(
+        {"referrals": {"$gt": 0}}, {"_id": 0, "user_id": 1, "username": 1, "avatar": 1, "referrals": 1}
+    ).sort("referrals", -1).limit(50).to_list(50)
+    rows = [{
+        "user_id": u["user_id"], "username": u["username"], "avatar": u.get("avatar", ""),
+        "referrals": int(u.get("referrals", 0)), "rank": i + 1,
+    } for i, u in enumerate(top)]
+    mine = int(user.get("referrals", 0))
+    my_rank = next((r["rank"] for r in rows if r["user_id"] == user["user_id"]), 0)
+    return {"rows": rows, "me": {"referrals": mine, "rank": my_rank}}
 
 
 # --- szybkie zakłady (gra w kartę) ---
@@ -1532,10 +1794,15 @@ async def quick_play(payload: QuickPlayIn, user: dict = Depends(get_current_user
         results.append({"type": kind, "guess": guess, "stake": stake, "win": win, "payout": payout})
 
     net = total_payout - total_stake
+    inc: dict = {"coins": net}
+    # trafiona wartość karty (1/13) — pod odznakę „Król kart”
+    if any(r["type"] == "rank" and r["win"] for r in results):
+        inc["stats.quick_rank_hits"] = 1
     await db.users.update_one(
         {"user_id": user["user_id"]},
-        {"$inc": {"coins": net}, "$set": {"quick_state": {"date": warsaw_today(), "count": used + 1}}},
+        {"$inc": inc, "$set": {"quick_state": {"date": warsaw_today(), "count": used + 1}}},
     )
+    await add_season_pnl(user["user_id"], net)
 
     return {
         "card": card,
