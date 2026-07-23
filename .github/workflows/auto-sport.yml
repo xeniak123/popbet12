@@ -30,10 +30,15 @@ jobs:
             exit 1
           fi
           python3 -c "
-          import json
+          import json, sys
           d = json.load(open('resp.json'))
           c = d['counts']
           print(f\"::notice::Dodano {c['created']} rynkow, rozstrzygnieto {c['resolved']}, zwrocono {c['refunded']}\")
           for q in d['created']: print(' +', q)
           for r in d['resolved']: print(' =', r['question'], '->', r['wygrala'])
+          errs = d.get('errors') or []
+          for e in errs: print('::error::API-Football:', e)
+          # Cicha bezczynnosc jest gorsza niz blad — sygnalizujemy ja wprost.
+          if errs:
+              sys.exit(1)
           "

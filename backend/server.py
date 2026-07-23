@@ -1650,18 +1650,26 @@ async def referral_me(user: dict = Depends(get_current_user)):
 
 
 # --- automat sportowy ---
-async def _af_get(path: str, params: dict) -> list:
-    """Zapytanie do API-Football. Zwraca listę wyników albo pustą przy błędzie."""
+async def _af_get(path: str, params: dict, errors: List[str]) -> list:
+    """Zapytanie do API-Football. Błędy trafiają do `errors`, żeby nie ginęły po cichu."""
     if not APIFOOTBALL_KEY:
         raise HTTPException(status_code=503, detail="Brak APIFOOTBALL_KEY — automat wyłączony")
-    async with httpx.AsyncClient(base_url=APIFOOTBALL_URL, timeout=25.0,
-                                 headers={"x-apisports-key": APIFOOTBALL_KEY}) as cli:
-        r = await cli.get(path, params=params)
-        r.raise_for_status()
-        data = r.json()
+    try:
+        async with httpx.AsyncClient(base_url=APIFOOTBALL_URL, timeout=25.0,
+                                     headers={"x-apisports-key": APIFOOTBALL_KEY}) as cli:
+            r = await cli.get(path, params=params)
+            r.raise_for_status()
+            data = r.json()
+    except Exception as e:
+        msg = f"{path} {params}: {type(e).__name__} {e}"
+        logger.warning("API-Football blad polaczenia: %s", msg)
+        errors.append(msg)
+        return []
     errs = data.get("errors")
-    if errs and (isinstance(errs, dict) and errs or isinstance(errs, list) and errs):
-        logger.warning("API-Football: %s", errs)
+    if errs and (isinstance(errs, (dict, list)) and len(errs) > 0):
+        msg = f"{path} {params}: {errs}"
+        logger.warning("API-Football: %s", msg)
+        errors.append(msg)
         return []
     return data.get("response", []) or []
 
@@ -1722,12 +1730,12 @@ async def _refund_bet(bet: dict) -> int:
 @app.post("/api/admin/auto/sync")
 async def auto_sync(_: None = Depends(require_admin)):
     now = now_utc()
-    created, resolved, refunded = [], [], []
+    created, resolved, refunded, errors = [], [], [], []
 
     # 1) NOWE RYNKI — jedno zapytanie na dzień zwraca wszystkie ligi, filtrujemy lokalnie
     for offset in (0, 1):
         day = (now + timedelta(days=offset)).strftime("%Y-%m-%d")
-        fixtures = await _af_get("/fixtures", {"date": day})
+        fixtures = await _af_get("/fixtures", {"date": day}, errors)
         for fx in fixtures:
             if fx["league"]["id"] not in AUTO_LEAGUES:
                 continue
@@ -1766,7 +1774,7 @@ async def auto_sync(_: None = Depends(require_admin)):
     ids = list(by_id.keys())
     for i in range(0, len(ids), 20):  # API przyjmuje do 20 identyfikatorów naraz
         chunk = ids[i:i + 20]
-        for fx in await _af_get("/fixtures", {"ids": "-".join(str(x) for x in chunk)}):
+        for fx in await _af_get("/fixtures", {"ids": "-".join(str(x) for x in chunk)}, errors):
             bet = by_id.get(fx["fixture"]["id"])
             if not bet:
                 continue
@@ -1783,8 +1791,10 @@ async def auto_sync(_: None = Depends(require_admin)):
             res = await _do_resolve(bet, win)
             resolved.append({"question": bet["question"], "wygrala": win, "wygranych": res["winners"]})
 
-    return {"ok": True, "created": created, "resolved": resolved, "refunded": refunded,
-            "counts": {"created": len(created), "resolved": len(resolved), "refunded": len(refunded)}}
+    return {"ok": not errors, "created": created, "resolved": resolved, "refunded": refunded,
+            "errors": errors,
+            "counts": {"created": len(created), "resolved": len(resolved),
+                       "refunded": len(refunded), "errors": len(errors)}}
 
 
 # --- odznaki ---
