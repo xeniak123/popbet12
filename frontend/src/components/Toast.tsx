@@ -10,7 +10,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
 type ToastType = "success" | "error" | "info";
 type ToastItem = { id: number; type: ToastType; message: string };
@@ -82,8 +82,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     : toast?.type === "error" ? "close-circle"
     : "information-circle";
   const iconColor =
-    toast?.type === "success" ? "#2E856E"
-    : toast?.type === "error" ? "#8E3A3A"
+    toast?.type === "success" ? colors.onWin
+    : toast?.type === "error" ? colors.onLoss
     : colors.primary;
 
   return (
@@ -120,7 +120,7 @@ export function useToast() {
   return ctx;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   wrap: { position: "absolute", zIndex: 1000 },
   card: {
     flexDirection: "row",
@@ -133,4 +133,4 @@ const styles = StyleSheet.create({
     ...shadow.soft,
   },
   text: { flex: 1, fontSize: 13, fontWeight: "800", color: colors.text },
-});
+}));

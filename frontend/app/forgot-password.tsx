@@ -9,9 +9,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { api } from "@/src/api/client";
 import { useToast } from "@/src/components/Toast";
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
+import { useTheme } from "@/src/theme/ThemeContext";
 export default function ForgotPasswordScreen() {
+  useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
+
   const router = useRouter();
   const toast = useToast();
   const [email, setEmail] = useState("");
@@ -100,7 +103,7 @@ export default function ForgotPasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   backLink: { padding: 6, alignSelf: "flex-start", marginBottom: 12 },
   title: { fontSize: 26, fontWeight: "900", color: colors.text },
@@ -119,4 +122,4 @@ const styles = StyleSheet.create({
   tokenBox: { marginTop: spacing.lg, padding: spacing.md, backgroundColor: colors.primarySoft, borderRadius: radii.card },
   tokenLabel: { fontSize: 12, fontWeight: "800", color: colors.primary, marginBottom: 6 },
   tokenValue: { fontSize: 12, fontFamily: Platform.select({ ios: "Menlo", android: "monospace" }), color: colors.text, fontWeight: "700" },
-});
+}));

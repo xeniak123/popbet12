@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
 type Props = {
   emoji: string;
@@ -32,7 +32,7 @@ export function EmptyState({ emoji, title, subtitle, ctaLabel, onCtaPress, testI
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   wrap: { alignItems: "center", paddingHorizontal: spacing.xl, paddingVertical: spacing.xl },
   emojiBox: {
     width: 96, height: 96, borderRadius: 32,
@@ -52,4 +52,4 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill, ...shadow.softer,
   },
   ctaText: { color: "#FFF", fontWeight: "900", fontSize: 14 },
-});
+}));

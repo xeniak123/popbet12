@@ -21,9 +21,12 @@ import { BetCardSkeleton } from "@/src/components/Skeleton";
 import StreakCard from "@/src/components/StreakCard";
 import { useToast } from "@/src/components/Toast";
 import { useAuth } from "@/src/context/AuthContext";
-import { categoryList, colors, spacing } from "@/src/theme/colors";
+import { categoryList, colors, spacing, themedStyles } from "@/src/theme/colors";
 
+import { useTheme } from "@/src/theme/ThemeContext";
 export default function MarketsScreen() {
+  useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
+
   const { user, refresh } = useAuth();
   const insets = useSafeAreaInsets();
   const toast = useToast();
@@ -152,7 +155,7 @@ function ChipRow({ value, onChange }: { value: string; onChange: (v: string) => 
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   stickyHeader: {
     paddingBottom: 6,
@@ -200,4 +203,4 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 16, fontWeight: "900", color: colors.text, marginBottom: 6 },
   emptyText: { fontSize: 13, color: colors.textMuted, textAlign: "center" },
-});
+}));

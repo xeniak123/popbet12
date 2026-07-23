@@ -10,10 +10,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api, TOKEN_KEY } from "@/src/api/client";
 import { useToast } from "@/src/components/Toast";
 import { useAuth } from "@/src/context/AuthContext";
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 import { storage } from "@/src/utils/storage";
 
+import { useTheme } from "@/src/theme/ThemeContext";
 export default function DeleteAccountScreen() {
+  useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
+
   const router = useRouter();
   const toast = useToast();
   const { user, logout } = useAuth();
@@ -50,7 +53,7 @@ export default function DeleteAccountScreen() {
           </View>
 
           <View style={styles.warnBox}>
-            <Ionicons name="warning" size={22} color="#C0392B" />
+            <Ionicons name="warning" size={22} color={colors.danger} />
             <Text style={styles.warnTitle}>To działanie jest nieodwracalne</Text>
             <Text style={styles.warnBody}>
               Twoje konto ({user?.email}), wszystkie zakłady, coiny, znajomi i statystyki
@@ -77,7 +80,7 @@ export default function DeleteAccountScreen() {
             onPress={() => setAck(!ack)}
             style={styles.ackRow}
           >
-            <View style={[styles.checkbox, ack && { backgroundColor: "#C0392B", borderColor: "#C0392B" }]}>
+            <View style={[styles.checkbox, ack && { backgroundColor: colors.danger, borderColor: colors.danger }]}>
               {ack && <Ionicons name="checkmark" size={16} color="#FFF" />}
             </View>
             <Text style={styles.ackText}>
@@ -103,7 +106,7 @@ export default function DeleteAccountScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   backBtn: { padding: 6, borderRadius: 999, backgroundColor: colors.bgAlt },
@@ -112,7 +115,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.lossSoft, borderRadius: radii.card, padding: spacing.md,
     alignItems: "flex-start", gap: 6, marginTop: spacing.md,
   },
-  warnTitle: { fontWeight: "900", fontSize: 15, color: "#8E3A3A" },
+  warnTitle: { fontWeight: "900", fontSize: 15, color: colors.onLoss },
   warnBody: { fontSize: 13, color: colors.text, lineHeight: 19, fontWeight: "600" },
   field: { marginTop: spacing.md },
   label: { fontSize: 12, fontWeight: "700", color: colors.textMuted, marginBottom: 6 },
@@ -127,8 +130,8 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   ackText: { flex: 1, color: colors.text, fontSize: 13, fontWeight: "700" },
-  dangerBtn: { backgroundColor: "#C0392B", paddingVertical: 14, borderRadius: 999, alignItems: "center", marginTop: spacing.lg, ...shadow.softer },
+  dangerBtn: { backgroundColor: colors.danger, paddingVertical: 14, borderRadius: 999, alignItems: "center", marginTop: spacing.lg, ...shadow.softer },
   dangerBtnText: { color: "#FFF", fontWeight: "900", fontSize: 15 },
   cancelBtn: { alignItems: "center", paddingVertical: 12, marginTop: 8 },
   cancelText: { color: colors.textMuted, fontWeight: "800", fontSize: 14 },
-});
+}));

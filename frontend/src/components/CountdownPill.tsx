@@ -9,7 +9,7 @@ import Animated, {
   cancelAnimation,
 } from "react-native-reanimated";
 
-import { colors } from "@/src/theme/colors";
+import { colors, themedStyles } from "@/src/theme/colors";
 import { formatCountdown } from "@/src/utils/time";
 
 export function CountdownPill({ closesAt, testID }: { closesAt: string; testID?: string }) {
@@ -46,7 +46,7 @@ export function CountdownPill({ closesAt, testID }: { closesAt: string; testID?:
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   pill: {
     alignSelf: "flex-start",
     paddingHorizontal: 12,
@@ -54,4 +54,4 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   text: { fontSize: 13, fontWeight: "700" },
-});
+}));

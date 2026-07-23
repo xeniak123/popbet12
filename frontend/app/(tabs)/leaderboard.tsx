@@ -24,8 +24,9 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { api } from "@/src/api/client";
 import { EmptyState } from "@/src/components/EmptyState";
 import { useAuth } from "@/src/context/AuthContext";
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
+import { useTheme } from "@/src/theme/ThemeContext";
 type Row = { user_id: string; username: string; avatar: string; coins: number; rank: number };
 type Board = { rows: Row[]; me: Row };
 type PendingReq = { request_id: string; from_id: string; from_username: string; to_id: string; created_at: string };
@@ -33,6 +34,8 @@ type Pending = { incoming: PendingReq[]; outgoing: PendingReq[] };
 type PhoneMatch = { user_id: string; username: string; avatar: string; phone?: string | null };
 
 export default function LeaderboardScreen() {
+  useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
+
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [tab, setTab] = useState<"global" | "friends">("global");
@@ -384,7 +387,7 @@ function AddFriendModal({ visible, onClose, onSent }: { visible: boolean; onClos
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: {
     paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 6,
@@ -420,7 +423,7 @@ const styles = StyleSheet.create({
   },
   pendingTitle: { fontSize: 13, fontWeight: "900", color: colors.primary, marginBottom: 8 },
   pendingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6 },
-  pendingAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#FFF", alignItems: "center", justifyContent: "center" },
+  pendingAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.card, alignItems: "center", justifyContent: "center" },
   pendingUsername: { flex: 1, fontSize: 14, fontWeight: "800", color: colors.text },
   smallBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
   smallBtnText: { fontSize: 12, fontWeight: "800", color: "#FFF" },
@@ -483,4 +486,4 @@ const styles = StyleSheet.create({
   settingsLinkText: { color: colors.primary, fontWeight: "800", fontSize: 13 },
   modalBtn: { paddingVertical: 14, borderRadius: 999, alignItems: "center" },
   modalBtnText: { fontWeight: "800", fontSize: 15 },
-});
+}));

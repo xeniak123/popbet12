@@ -12,7 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { api } from "@/src/api/client";
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
 type StreakStatus = { current: number; best: number; can_checkin: boolean; next_bonus: number };
 
@@ -125,7 +125,7 @@ export default function StreakCard({ onClaimed }: { onClaimed: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   card: {
     backgroundColor: colors.card,
     borderRadius: radii.card,
@@ -153,4 +153,4 @@ const styles = StyleSheet.create({
   },
   ctaText: { fontSize: 14, fontWeight: "800" },
   msg: { marginTop: 6, fontSize: 12, fontWeight: "700", color: colors.primary, textAlign: "center" },
-});
+}));

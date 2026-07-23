@@ -9,7 +9,7 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 
-import { colors } from "@/src/theme/colors";
+import { colors, themedStyles } from "@/src/theme/colors";
 
 export function Skeleton({ style }: { style?: ViewStyle | ViewStyle[] }) {
   const opacity = useSharedValue(0.4);
@@ -46,7 +46,7 @@ export function BetCardSkeleton() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   base: { backgroundColor: colors.bgAlt, borderRadius: 12 },
   card: {
     backgroundColor: colors.card,
@@ -56,4 +56,4 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-});
+}));

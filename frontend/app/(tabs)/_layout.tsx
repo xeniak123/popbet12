@@ -7,7 +7,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/src/context/AuthContext";
 import { colors } from "@/src/theme/colors";
 
+import { useTheme } from "@/src/theme/ThemeContext";
 export default function TabsLayout() {
+  useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
+
   const insets = useSafeAreaInsets();
   const { user, loading } = useAuth();
 

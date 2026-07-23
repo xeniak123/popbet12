@@ -19,8 +19,9 @@ import { captureRef } from "react-native-view-shot";
 
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
+import { useTheme } from "@/src/theme/ThemeContext";
 type ProfileData = {
   user: { user_id: string; username: string; email: string; coins: number; avatar: string };
   stats: {
@@ -39,6 +40,8 @@ type ProfileData = {
 type Template = "stats" | "streak" | "biggest";
 
 export default function ProfileScreen() {
+  useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
+
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { refresh } = useAuth();
@@ -273,7 +276,7 @@ function TemplateOption({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: {
     paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 6,
@@ -321,7 +324,7 @@ const styles = StyleSheet.create({
     alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8,
   },
   secondaryBtnText: { color: colors.primary, fontWeight: "900", fontSize: 14 },
-  errorMsg: { color: "#C0392B", fontSize: 12, textAlign: "center" },
+  errorMsg: { color: colors.danger, fontSize: 12, textAlign: "center" },
   empty: { padding: spacing.xl, alignItems: "center" },
   emptyText: { fontSize: 13, color: colors.textMuted },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(45,55,72,0.5)", alignItems: "center", justifyContent: "center", padding: spacing.lg },
@@ -337,4 +340,4 @@ const styles = StyleSheet.create({
   templateSub: { fontSize: 12, color: colors.textMuted, fontWeight: "700", marginTop: 2 },
   modalCancel: { alignItems: "center", paddingVertical: 12 },
   modalCancelText: { fontSize: 14, fontWeight: "800", color: colors.textMuted },
-});
+}));

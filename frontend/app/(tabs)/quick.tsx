@@ -18,8 +18,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { useToast } from "@/src/components/Toast";
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
+import { useTheme } from "@/src/theme/ThemeContext";
 const SUITS = [
   { key: "hearts", symbol: "♥", label: "Kier", color: "red" },
   { key: "diamonds", symbol: "♦", label: "Karo", color: "red" },
@@ -48,6 +49,8 @@ type PlayResult = {
 type Status = { plays_left: number; max_per_day: number; min_stake: number };
 
 export default function QuickScreen() {
+  const { isDark } = useTheme();
+
   const { user, refresh } = useAuth();
   const toast = useToast();
 
@@ -189,7 +192,7 @@ export default function QuickScreen() {
                   active={colorGuess === "red"}
                   onPress={() => pickColor("red")}
                   label="Czerwona"
-                  bg="#FBE7E1"
+                  bg={isDark ? "#3B2A26" : "#FBE7E1"}
                   border={RED}
                   emoji="🔴"
                 />
@@ -197,7 +200,7 @@ export default function QuickScreen() {
                   active={colorGuess === "black"}
                   onPress={() => pickColor("black")}
                   label="Czarna"
-                  bg="#E7EAF0"
+                  bg={isDark ? "#262A33" : "#E7EAF0"}
                   border={BLACK}
                   emoji="⚫"
                 />
@@ -297,7 +300,7 @@ function ResultPanel({ result, onAgain, playsLeft }: { result: PlayResult; onAga
     <View>
       <View style={[styles.netBanner, { backgroundColor: win ? colors.winSoft : colors.lossSoft, borderColor: win ? colors.win : colors.loss }]}>
         <Text style={styles.netTitle}>{win ? "🎉 Wygrałeś!" : "😔 Tym razem nie"}</Text>
-        <Text style={[styles.netVal, { color: win ? "#2f9e77" : "#c0504a" }]}>
+        <Text style={[styles.netVal, { color: win ? colors.onWin : colors.onLoss }]}>
           {result.net >= 0 ? "+" : ""}{result.net} 🪙
         </Text>
       </View>
@@ -317,7 +320,7 @@ function ResultPanel({ result, onAgain, playsLeft }: { result: PlayResult; onAga
                 : leg.guess})
             </Text>
           </Text>
-          <Text style={[styles.legPay, { color: leg.win ? "#2f9e77" : colors.textMuted }]}>
+          <Text style={[styles.legPay, { color: leg.win ? colors.onWin : colors.textMuted }]}>
             {leg.win ? `+${leg.payout - leg.stake}` : `-${leg.stake}`}
           </Text>
         </View>
@@ -400,7 +403,7 @@ function StakeRow({ value, onChange, max }: { value: number; onChange: (v: numbe
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
@@ -509,4 +512,4 @@ const styles = StyleSheet.create({
   legLabel: { fontSize: 15, fontWeight: "800", color: colors.text, flex: 1 },
   legGuess: { fontWeight: "600", color: colors.textMuted },
   legPay: { fontSize: 15, fontWeight: "900" },
-});
+}));

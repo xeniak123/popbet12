@@ -9,9 +9,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { api } from "@/src/api/client";
 import { useToast } from "@/src/components/Toast";
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
+import { useTheme } from "@/src/theme/ThemeContext";
 export default function ChangePasswordScreen() {
+  useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
+
   const router = useRouter();
   const toast = useToast();
   const [current, setCurrent] = useState("");
@@ -75,7 +78,7 @@ export default function ChangePasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   backBtn: { padding: 6, borderRadius: 999, backgroundColor: colors.bgAlt },
@@ -88,4 +91,4 @@ const styles = StyleSheet.create({
   },
   primaryBtn: { backgroundColor: colors.primary, paddingVertical: 14, borderRadius: 999, alignItems: "center", marginTop: spacing.lg, ...shadow.softer },
   primaryBtnText: { color: "#FFF", fontWeight: "900", fontSize: 15 },
-});
+}));

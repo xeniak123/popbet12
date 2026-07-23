@@ -12,7 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { CountdownPill } from "@/src/components/CountdownPill";
-import { colors, radii, shadow, spacing, CategoryKey } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, CategoryKey, themedStyles } from "@/src/theme/colors";
 
 export type BetOption = { key: string; label: string; stake_total: number; voters: number };
 export type Bet = {
@@ -197,7 +197,7 @@ export function BetCard({ bet, userCoins, onPlace }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   card: {
     backgroundColor: colors.card,
     borderRadius: radii.card,
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   ctaText: { fontSize: 15, fontWeight: "800", letterSpacing: 0.2 },
-  error: { color: "#C0392B", fontSize: 12, marginTop: 4 },
+  error: { color: colors.danger, fontSize: 12, marginTop: 4 },
   lockedBox: {
     marginTop: spacing.md,
     backgroundColor: colors.bgAlt,
@@ -263,4 +263,4 @@ const styles = StyleSheet.create({
   },
   lockedTitle: { fontSize: 14, fontWeight: "800", color: colors.text },
   lockedDesc: { marginTop: 4, fontSize: 13, color: colors.textMuted, fontWeight: "600" },
-});
+}));

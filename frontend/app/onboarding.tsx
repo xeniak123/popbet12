@@ -28,9 +28,10 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import ConfettiOverlay from "@/src/components/Confetti";
 import { useAuth } from "@/src/context/AuthContext";
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 import { registerPush } from "@/src/utils/push";
 
+import { useTheme } from "@/src/theme/ThemeContext";
 type Slide = { emoji: string; title: string; body: string; bg: string };
 const SLIDES: Slide[] = [
   {
@@ -54,6 +55,8 @@ const SLIDES: Slide[] = [
 ];
 
 export default function Onboarding() {
+  useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
+
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
@@ -345,7 +348,7 @@ function AuthScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   slide: { flex: 1, paddingHorizontal: spacing.lg, alignItems: "flex-start", justifyContent: "center" },
   slideEmoji: {
@@ -394,7 +397,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: "600",
   },
-  error: { marginTop: 8, color: "#C0392B", fontSize: 13, fontWeight: "600" },
+  error: { marginTop: 8, color: colors.danger, fontSize: 13, fontWeight: "600" },
   forgotLink: { alignSelf: "flex-end", paddingVertical: 8, marginTop: 4 },
   forgotText: { color: colors.primary, fontWeight: "800", fontSize: 13 },
   rewardBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(45,55,72,0.45)" },
@@ -402,7 +405,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: "35%",
     alignSelf: "center",
-    backgroundColor: "#FFF",
+    backgroundColor: colors.card,
     borderRadius: 32,
     paddingHorizontal: 36,
     paddingVertical: 28,
@@ -412,4 +415,4 @@ const styles = StyleSheet.create({
   rewardEmoji: { fontSize: 72 },
   rewardTitle: { fontSize: 56, fontWeight: "900", color: colors.primary, marginTop: 8 },
   rewardSub: { fontSize: 16, fontWeight: "700", color: colors.text, marginTop: 4 },
-});
+}));

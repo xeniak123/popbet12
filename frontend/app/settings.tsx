@@ -1,5 +1,6 @@
 // Settings screen — logout, notification toggle, delete account, about.
 import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
@@ -17,9 +18,12 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/src/context/AuthContext";
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
+import { useTheme } from "@/src/theme/ThemeContext";
 export default function SettingsScreen() {
+  const { isDark, toggle } = useTheme();
+
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, logout } = useAuth();
@@ -96,6 +100,26 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Wygląd</Text>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleLabel}>Tryb ciemny</Text>
+              <Text style={styles.toggleSub}>
+                {isDark
+                  ? "Włączony — ciemne tło, łagodniejsze dla oczu wieczorem."
+                  : "Wyłączony — jasny motyw aplikacji."}
+              </Text>
+            </View>
+            <Switch
+              testID="settings-dark-mode-toggle"
+              value={isDark}
+              onValueChange={toggle}
+              trackColor={{ true: colors.primary, false: colors.border }}
+            />
+          </View>
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.sectionTitle}>Powiadomienia</Text>
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
@@ -151,7 +175,7 @@ export default function SettingsScreen() {
             <Text style={styles.actionLabel}>Regulamin i prywatność</Text>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
           </TouchableOpacity>
-          <Row label="Wersja" value="1.0.0" />
+          <Row label="Wersja" value={Constants.expoConfig?.version ?? "—"} />
           <Row label="Waluta" value="Fikcyjna — bez wypłat" />
         </View>
 
@@ -162,8 +186,8 @@ export default function SettingsScreen() {
             style={styles.actionRow}
             onPress={() => router.push("/delete-account" as any)}
           >
-            <Ionicons name="trash-outline" size={20} color="#C0392B" />
-            <Text style={[styles.actionLabel, { color: "#C0392B" }]}>Usuń konto</Text>
+            <Ionicons name="trash-outline" size={20} color={colors.danger} />
+            <Text style={[styles.actionLabel, { color: colors.danger }]}>Usuń konto</Text>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
@@ -173,7 +197,7 @@ export default function SettingsScreen() {
           style={[styles.card, styles.logoutRow]}
           onPress={() => setConfirmLogout(true)}
         >
-          <Ionicons name="log-out-outline" size={20} color="#C0392B" />
+          <Ionicons name="log-out-outline" size={20} color={colors.danger} />
           <Text style={styles.logoutText}>Wyloguj się</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -194,7 +218,7 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 testID="settings-logout-confirm"
                 onPress={doLogout}
-                style={[styles.modalBtn, { backgroundColor: "#C0392B", flex: 1 }]}
+                style={[styles.modalBtn, { backgroundColor: colors.danger, flex: 1 }]}
               >
                 <Text style={[styles.modalBtnText, { color: "#FFF" }]}>Wyloguj</Text>
               </TouchableOpacity>
@@ -215,7 +239,7 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: {
     paddingHorizontal: spacing.md,
@@ -254,13 +278,13 @@ const styles = StyleSheet.create({
   actionLabel: { flex: 1, color: colors.text, fontSize: 14, fontWeight: "800" },
   logoutRow: {
     flexDirection: "row", alignItems: "center", gap: 10, justifyContent: "center",
-    backgroundColor: "#FBE5E5",
+    backgroundColor: colors.dangerSoft,
   },
-  logoutText: { color: "#C0392B", fontSize: 15, fontWeight: "900" },
+  logoutText: { color: colors.danger, fontSize: 15, fontWeight: "900" },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(45,55,72,0.5)", alignItems: "center", justifyContent: "center", padding: spacing.lg },
   modalCard: { width: "100%", backgroundColor: colors.card, borderRadius: 28, padding: spacing.lg, ...shadow.soft },
   modalTitle: { fontSize: 20, fontWeight: "900", color: colors.text },
   modalSub: { marginTop: 6, fontSize: 13, color: colors.textMuted },
   modalBtn: { paddingVertical: 14, borderRadius: 999, alignItems: "center" },
   modalBtnText: { fontWeight: "800", fontSize: 15 },
-});
+}));

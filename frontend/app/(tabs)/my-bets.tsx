@@ -6,8 +6,9 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { api } from "@/src/api/client";
 import { EmptyState } from "@/src/components/EmptyState";
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
+import { useTheme } from "@/src/theme/ThemeContext";
 type MyBet = {
   bet_id: string;
   category: string;
@@ -31,6 +32,8 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 export default function MyBetsScreen() {
+  useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
+
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<"active" | "resolved">("active");
   const [items, setItems] = useState<MyBet[]>([]);
@@ -108,8 +111,8 @@ function Row({ item }: { item: MyBet }) {
 
   const badge = item.resolved
     ? won
-      ? { bg: colors.winSoft, color: "#2E856E", label: `+${item.payout - item.stake}` }
-      : { bg: colors.lossSoft, color: "#8E3A3A", label: `-${item.stake}` }
+      ? { bg: colors.winSoft, color: colors.onWin, label: `+${item.payout - item.stake}` }
+      : { bg: colors.lossSoft, color: colors.onLoss, label: `-${item.stake}` }
     : { bg: colors.primarySoft, color: colors.primary, label: `Aktywny` };
 
   return (
@@ -146,7 +149,7 @@ function Row({ item }: { item: MyBet }) {
             size={18}
             color={won ? colors.win : colors.loss}
           />
-          <Text style={[styles.resultText, { color: won ? "#2E856E" : "#8E3A3A" }]}>
+          <Text style={[styles.resultText, { color: won ? colors.onWin : colors.onLoss }]}>
             {won ? "Wygrałeś!" : "Niestety, przegrana"}
           </Text>
         </View>
@@ -155,7 +158,7 @@ function Row({ item }: { item: MyBet }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 6 },
   title: { fontSize: 24, fontWeight: "900", color: colors.text },
@@ -192,4 +195,4 @@ const styles = StyleSheet.create({
   empty: { padding: spacing.xl, alignItems: "center" },
   emptyTitle: { fontSize: 16, fontWeight: "900", color: colors.text, marginBottom: 6 },
   emptyText: { fontSize: 13, color: colors.textMuted, textAlign: "center" },
-});
+}));

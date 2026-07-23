@@ -18,11 +18,14 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
+import { useTheme } from "@/src/theme/ThemeContext";
 type Friend = { user_id: string; username: string; avatar: string; coins: number };
 
 export default function TransferScreen() {
+  useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
+
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, refresh } = useAuth();
@@ -182,7 +185,7 @@ export default function TransferScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: {
     paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: 6,
@@ -217,7 +220,7 @@ const styles = StyleSheet.create({
   amountChips: { flexDirection: "row", gap: 8, marginTop: 10 },
   amountChip: { flex: 1, backgroundColor: colors.primarySoft, paddingVertical: 8, borderRadius: 999, alignItems: "center" },
   amountChipText: { color: colors.primary, fontWeight: "900" },
-  err: { color: "#C0392B", textAlign: "center", fontSize: 13, fontWeight: "700", marginTop: 4 },
+  err: { color: colors.danger, textAlign: "center", fontSize: 13, fontWeight: "700", marginTop: 4 },
   msg: { color: colors.primary, textAlign: "center", fontSize: 14, fontWeight: "800", marginTop: 4 },
   footer: { paddingHorizontal: spacing.md, paddingTop: 8 },
   cta: {
@@ -225,4 +228,4 @@ const styles = StyleSheet.create({
     alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8, ...shadow.softer,
   },
   ctaText: { color: "#FFF", fontWeight: "900", fontSize: 16 },
-});
+}));

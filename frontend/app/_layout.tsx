@@ -3,12 +3,13 @@ import * as SplashScreen from "expo-splash-screen";
 import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import { useEffect } from "react";
-import { LogBox, Platform } from "react-native";
+import { LogBox, Platform, StatusBar } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider } from "@/src/context/AuthContext";
 import { ToastProvider } from "@/src/components/Toast";
+import { ThemeProvider, useTheme } from "@/src/theme/ThemeContext";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 
 LogBox.ignoreAllLogs(true);
@@ -70,12 +71,25 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <AuthProvider>
-          <ToastProvider>
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#FAFAF7" } }} />
-          </ToastProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <ToastProvider>
+              <ThemedStack />
+            </ToastProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>
+  );
+}
+
+// Osobny komponent, żeby tło nawigatora i pasek statusu szły za motywem.
+function ThemedStack() {
+  const { colors, isDark } = useTheme();
+  return (
+    <>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />
+    </>
   );
 }

@@ -5,9 +5,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { HAS_BACKEND_URL } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
+import { useTheme } from "@/src/theme/ThemeContext";
 export default function Index() {
+  useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
+
   const { user, loading } = useAuth();
 
   if (!HAS_BACKEND_URL) {
@@ -46,7 +49,7 @@ export default function Index() {
   return user ? <Redirect href="/(tabs)" /> : <Redirect href="/onboarding" />;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   center: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" },
   errorScreen: { flex: 1, backgroundColor: colors.bg },
   errorContent: { padding: spacing.lg, alignItems: "stretch" },
@@ -64,4 +67,4 @@ const styles = StyleSheet.create({
   },
   mono: { fontFamily: "Menlo", color: colors.primary },
   errorFoot: { marginTop: spacing.lg, fontSize: 12, color: colors.textMuted, textAlign: "center", lineHeight: 18 },
-});
+}));

@@ -5,9 +5,12 @@ import React from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors, radii, shadow, spacing } from "@/src/theme/colors";
+import { colors, radii, shadow, spacing, themedStyles } from "@/src/theme/colors";
 
+import { useTheme } from "@/src/theme/ThemeContext";
 export default function LegalScreen() {
+  useTheme(); // subskrypcja motywu — wymusza re-render po przelaczeniu
+
   const router = useRouter();
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
@@ -62,7 +65,7 @@ function P({ children }: { children: React.ReactNode }) {
   return <Text style={styles.p}>{children}</Text>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: {
     paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: 6,
@@ -77,4 +80,4 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: "900", color: colors.text, marginBottom: 10 },
   p: { fontSize: 13, color: colors.text, lineHeight: 20, fontWeight: "600", marginBottom: 8 },
   footer: { textAlign: "center", color: colors.textMuted, fontSize: 12, marginTop: 8 },
-});
+}));
