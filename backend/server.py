@@ -95,6 +95,20 @@ BADGE_DEFS = [
      "tiers": [("brąz", 1), ("srebro", 3), ("złoto", 10)]},
 ]
 
+# --- Automat sportowy (API-Football) ---
+# Rynki tworzone i rozstrzygane z oficjalnych danych — bez AI i bez ręcznej oceny.
+APIFOOTBALL_KEY = os.environ.get("APIFOOTBALL_KEY", "")
+APIFOOTBALL_URL = "https://v3.football.api-sports.io"
+# 106 Ekstraklasa, 107 I Liga, 39 Premier League, 140 La Liga,
+# 78 Bundesliga, 135 Serie A, 61 Ligue 1, 2 Liga Mistrzów
+AUTO_LEAGUES = [
+    int(x) for x in os.environ.get("AUTO_LEAGUES", "106,107,39,140,78,135,61,2").split(",") if x.strip()
+]
+# Typy rynków generowanych z jednego meczu (dwie opcje, zawsze rozstrzygalne z wyniku)
+AUTO_MARKETS = [m.strip() for m in os.environ.get("AUTO_MARKETS", "home_win,over25").split(",") if m.strip()]
+FINISHED_STATUSES = {"FT", "AET", "PEN"}
+DEAD_STATUSES = {"PST", "CANC", "ABD", "AWD", "WO"}  # przełożony/odwołany → zwrot stawek
+
 WARSAW_TZ = ZoneInfo("Europe/Warsaw")
 SUIT_COLOR = {"hearts": "red", "diamonds": "red", "clubs": "black", "spades": "black"}
 SUIT_SYMBOL = {"hearts": "♥", "diamonds": "♦", "clubs": "♣", "spades": "♠"}
@@ -1633,6 +1647,144 @@ async def referral_me(user: dict = Depends(get_current_user)):
         "next_milestone": next_milestone,
         "to_next_milestone": max(0, next_milestone - referrals),
     }
+
+
+# --- automat sportowy ---
+async def _af_get(path: str, params: dict) -> list:
+    """Zapytanie do API-Football. Zwraca listę wyników albo pustą przy błędzie."""
+    if not APIFOOTBALL_KEY:
+        raise HTTPException(status_code=503, detail="Brak APIFOOTBALL_KEY — automat wyłączony")
+    async with httpx.AsyncClient(base_url=APIFOOTBALL_URL, timeout=25.0,
+                                 headers={"x-apisports-key": APIFOOTBALL_KEY}) as cli:
+        r = await cli.get(path, params=params)
+        r.raise_for_status()
+        data = r.json()
+    errs = data.get("errors")
+    if errs and (isinstance(errs, dict) and errs or isinstance(errs, list) and errs):
+        logger.warning("API-Football: %s", errs)
+        return []
+    return data.get("response", []) or []
+
+
+def _market_from_fixture(fx: dict, kind: str) -> Optional[dict]:
+    """Buduje definicję rynku z meczu. Zawsze dwie opcje, zawsze rozstrzygalne z wyniku."""
+    home = fx["teams"]["home"]["name"]
+    away = fx["teams"]["away"]["name"]
+    league = fx["league"]["name"]
+    kickoff = datetime.fromisoformat(fx["fixture"]["date"].replace("Z", "+00:00"))
+    local = kickoff.astimezone(WARSAW_TZ).strftime("%d.%m, %H:%M")
+    if kind == "home_win":
+        question = f"Czy {home} wygra z {away}?"
+    elif kind == "over25":
+        question = f"Czy w meczu {home} – {away} padną 3+ gole?"
+    else:
+        return None
+    return {
+        "question": question[:120],
+        "subtitle": f"{league} · {local}",
+        "closes_at": kickoff,  # zamykamy w chwili pierwszego gwizdka
+        "options": [
+            {"key": "a", "label": "Tak", "stake_total": 0, "voters": 0},
+            {"key": "b", "label": "Nie", "stake_total": 0, "voters": 0},
+        ],
+    }
+
+
+def _winner_from_score(kind: str, fx: dict) -> Optional[str]:
+    """Zwycięska opcja wyliczona z oficjalnego wyniku (czas regulaminowy)."""
+    ft = (fx.get("score") or {}).get("fulltime") or {}
+    h, a = ft.get("home"), ft.get("away")
+    if h is None or a is None:
+        g = fx.get("goals") or {}
+        h, a = g.get("home"), g.get("away")
+    if h is None or a is None:
+        return None
+    if kind == "home_win":
+        return "a" if h > a else "b"
+    if kind == "over25":
+        return "a" if (h + a) >= 3 else "b"
+    return None
+
+
+async def _refund_bet(bet: dict) -> int:
+    """Zwrot stawek przy odwołanym meczu."""
+    placements = await db.placements.find({"bet_id": bet["bet_id"]}, {"_id": 0}).to_list(1000)
+    n = 0
+    for p in placements:
+        if not p.get("resolved"):
+            await db.users.update_one({"user_id": p["user_id"]}, {"$inc": {"coins": p["stake"]}})
+            n += 1
+    await db.placements.delete_many({"bet_id": bet["bet_id"]})
+    await db.bets.delete_one({"bet_id": bet["bet_id"]})
+    return n
+
+
+@app.post("/api/admin/auto/sync")
+async def auto_sync(_: None = Depends(require_admin)):
+    now = now_utc()
+    created, resolved, refunded = [], [], []
+
+    # 1) NOWE RYNKI — jedno zapytanie na dzień zwraca wszystkie ligi, filtrujemy lokalnie
+    for offset in (0, 1):
+        day = (now + timedelta(days=offset)).strftime("%Y-%m-%d")
+        fixtures = await _af_get("/fixtures", {"date": day})
+        for fx in fixtures:
+            if fx["league"]["id"] not in AUTO_LEAGUES:
+                continue
+            if fx["fixture"]["status"]["short"] != "NS":  # tylko jeszcze nierozpoczęte
+                continue
+            kickoff = datetime.fromisoformat(fx["fixture"]["date"].replace("Z", "+00:00"))
+            if kickoff <= now + timedelta(minutes=30):
+                continue  # za późno, żeby ktokolwiek zdążył obstawić
+            for kind in AUTO_MARKETS:
+                auto_key = f"af:{fx['fixture']['id']}:{kind}"
+                if await db.bets.find_one({"auto_key": auto_key}, {"_id": 0, "bet_id": 1}):
+                    continue
+                spec = _market_from_fixture(fx, kind)
+                if not spec:
+                    continue
+                doc = {
+                    "bet_id": make_id("bet"),
+                    "category": "sport",
+                    **spec,
+                    "created_at": now,
+                    "resolved": False,
+                    "winning_option": None,
+                    "image_url": None,
+                    "auto_key": auto_key,
+                    "auto": {"source": "api-football", "fixture_id": fx["fixture"]["id"], "kind": kind},
+                }
+                await db.bets.insert_one(doc)
+                created.append(spec["question"])
+
+    # 2) ROZSTRZYGANIE — po ID meczu, więc działa niezależnie od limitu dat w darmowym planie
+    pending = await db.bets.find(
+        {"resolved": False, "auto.fixture_id": {"$exists": True}, "closes_at": {"$lte": now}},
+        {"_id": 0},
+    ).to_list(300)
+    by_id = {b["auto"]["fixture_id"]: b for b in pending}
+    ids = list(by_id.keys())
+    for i in range(0, len(ids), 20):  # API przyjmuje do 20 identyfikatorów naraz
+        chunk = ids[i:i + 20]
+        for fx in await _af_get("/fixtures", {"ids": "-".join(str(x) for x in chunk)}):
+            bet = by_id.get(fx["fixture"]["id"])
+            if not bet:
+                continue
+            status = fx["fixture"]["status"]["short"]
+            if status in DEAD_STATUSES:
+                n = await _refund_bet(bet)
+                refunded.append({"question": bet["question"], "zwroty": n})
+                continue
+            if status not in FINISHED_STATUSES:
+                continue
+            win = _winner_from_score(bet["auto"]["kind"], fx)
+            if not win:
+                continue
+            res = await _do_resolve(bet, win)
+            resolved.append({"question": bet["question"], "wygrala": win, "wygranych": res["winners"]})
+
+    return {"ok": True, "created": created, "resolved": resolved, "refunded": refunded,
+            "counts": {"created": len(created), "resolved": len(resolved), "refunded": len(refunded)}}
 
 
 # --- odznaki ---

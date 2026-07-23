@@ -18,6 +18,8 @@ services:
         generateValue: true
       - key: ADMIN_KEY
         sync: false # wklej wlasny klucz w panelu Render
+      - key: APIFOOTBALL_KEY
+        sync: false # klucz z dashboard.api-football.com (automat sportowy)
 
       - key: ACCESS_TOKEN_DAYS
         value: "30"

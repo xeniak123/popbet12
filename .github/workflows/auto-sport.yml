@@ -1,0 +1,39 @@
+name: Automat sportowy (dodaje i rozstrzyga mecze)
+
+on:
+  schedule:
+    # Co 6 godzin. Rynki powstają ~dobę przed meczem, wyniki rozliczane po jego końcu.
+    - cron: "15 5,11,17,23 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Synchronizacja z API-Football
+        env:
+          ADMIN_KEY: ${{ secrets.POPBET_ADMIN_KEY }}
+        run: |
+          if [ -z "$ADMIN_KEY" ]; then
+            echo "::error::Brak sekretu POPBET_ADMIN_KEY w ustawieniach repozytorium"
+            exit 1
+          fi
+          # Render usypia darmowy serwer — pierwsze wywołanie może trwać ~50 s.
+          code=$(curl -s -o resp.json -w "%{http_code}" --max-time 180 \
+            -X POST "https://popbet-backend.onrender.com/api/admin/auto/sync" \
+            -H "X-Admin-Key: $ADMIN_KEY" -H "Content-Type: application/json")
+          echo "HTTP $code"
+          cat resp.json
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::error::Synchronizacja nie powiodła się (HTTP $code)"
+            exit 1
+          fi
+          python3 -c "
+          import json
+          d = json.load(open('resp.json'))
+          c = d['counts']
+          print(f\"::notice::Dodano {c['created']} rynkow, rozstrzygnieto {c['resolved']}, zwrocono {c['refunded']}\")
+          for q in d['created']: print(' +', q)
+          for r in d['resolved']: print(' =', r['question'], '->', r['wygrala'])
+          "
